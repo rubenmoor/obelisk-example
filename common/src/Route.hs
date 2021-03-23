@@ -8,7 +8,9 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
-module Common.Route where
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE PatternSynonyms #-}
+module Route where
 
 {- -- You will probably want these imports for composing Encoders.
 import Prelude hiding (id, (.))
@@ -16,14 +18,30 @@ import Control.Category
 -}
 
 import Data.Text (Text)
-import Data.Functor.Identity
+import Data.Functor.Identity ( Identity )
 
 import Obelisk.Route
-import Obelisk.Route.TH
+    ( Encoder,
+      R,
+      FullRoute(FullRoute_Backend),
+      PageName,
+      SegmentResult(PathEnd, PathSegment),
+      mkFullRouteEncoder,
+      pattern (:/),
+      unitEncoder )
+import Obelisk.Route.TH ( deriveRouteComponent )
+import Data.Either (Either)
+import Data.Functor ((<$>))
+import Control.Monad (mapM)
+import Data.Foldable (concat)
+import Control.Category (Category(id))
+import Data.Function (($))
+import Data.Monoid (Monoid(mempty))
 
 data BackendRoute :: * -> * where
   -- | Used to handle unparseable routes.
   BackendRoute_Missing :: BackendRoute ()
+  BackendRoutes :: BackendRoute PageName
   -- You can define any routes that will be handled specially by the backend here.
   -- i.e. These do not serve the frontend, but do something different, such as serving static files.
 
@@ -36,7 +54,9 @@ fullRouteEncoder
 fullRouteEncoder = mkFullRouteEncoder
   (FullRoute_Backend BackendRoute_Missing :/ ())
   (\case
-      BackendRoute_Missing -> PathSegment "missing" $ unitEncoder mempty)
+      BackendRoute_Missing -> PathSegment "missing" $ unitEncoder mempty
+      BackendRoutes -> PathSegment "routes" id
+  )
   (\case
       FrontendRoute_Main -> PathEnd $ unitEncoder mempty)
 

@@ -1,8 +1,9 @@
 { system ? builtins.currentSystem
-, unstable ? import <nixos-unstable> {}
 , obelisk ? import ./.obelisk/impl {
   reflex-platform-func = args@{ ... }: import ../reflex-platform (args // {
       inherit system;
+      # activate haskell-language-server for reflex-platform with full
+      # support for template-haskell
       hlsSupport = true;
     });
     inherit system;
@@ -25,5 +26,10 @@ project ./. ({ ... }: {
   android.displayName = "Obelisk Minimal Example";
   ios.bundleIdentifier = "systems.obsidian.obelisk.examples.minimal";
   ios.bundleName = "Obelisk Minimal Example";
-  # shellToolOverrides = ghc: super: { haskell-language-server = unstable.haskell-language-server; };
+  overrides = self: super: {
+    servant-snap = (import ./dep/servant-snap) self super;
+    hspec-snap = (import ./dep/hspec-snap) self super;
+    servant-reflex = self.callPackage ../servant-reflex {};
+    persistent = self.callHackage "persistent" "2.9.2" {};
+  };
 })

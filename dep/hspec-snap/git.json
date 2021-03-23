@@ -1,0 +1,10 @@
+{
+  "url": "https://github.com/dbp/hspec-snap.git",
+  "rev": "60216c2fe435f157de4e253df0d318ecc1dfdaab",
+  "date": "2020-03-07T21:32:08-05:00",
+  "path": "/nix/store/9dj85hfhcdpr0m6w02j1njwvn9c0alk5-hspec-snap",
+  "sha256": "08i8462pp76p1kkrpa1968ky7y9jbxz4073qmx9l8r83wqwwjxkk",
+  "fetchSubmodules": false,
+  "deepClone": false,
+  "leaveDotGit": false
+}

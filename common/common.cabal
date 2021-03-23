@@ -5,11 +5,15 @@ build-type: Simple
 
 library
   hs-source-dirs: src
-  build-depends: base
-               , obelisk-route
-               , mtl
-               , text
+  build-depends:
+      base
+    , bytestring
+    , http-media
+    , obelisk-route
+    , mtl
+    , servant
+    , text
   exposed-modules:
-    Common.Api
-    Common.Route
+      Common
+    , Route
   ghc-options: -Wall -Wredundant-constraints -Wincomplete-uni-patterns -Wincomplete-record-updates -O -fno-show-valid-hole-fits

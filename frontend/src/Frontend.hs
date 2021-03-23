@@ -16,8 +16,7 @@ import Obelisk.Generated.Static
 
 import Reflex.Dom.Core
 
-import Common.Api
-import Common.Route
+import Route
 
 
 -- This runs in a monad that can be run on the client or the server.
@@ -30,8 +29,8 @@ frontend = Frontend
       elAttr "link" ("href" =: static @"main.css" <> "type" =: "text/css" <> "rel" =: "stylesheet") blank
   , _frontend_body = do
       el "h1" $ text "Welcome to Obelisk!"
-      el "p" $ text $ T.pack commonStuff
-      
+      el "p" $ text $ T.pack "foooooo"
+
       -- `prerender` and `prerender_` let you choose a widget to run on the server
       -- during prerendering and a different widget to run on the client with
       -- JavaScript. The following will generate a `blank` widget on the server and

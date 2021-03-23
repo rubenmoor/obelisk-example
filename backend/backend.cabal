@@ -7,17 +7,35 @@ library
   hs-source-dirs: src
   if impl(ghcjs)
     buildable: False
-  build-depends: base
-               , common
-               , frontend
-               , obelisk-backend
-               , obelisk-route
-               , servant-snap
-               , servant
+  build-depends:
+      base
+    , aeson
+    , aeson-pretty
+    , bytestring
+    , common
+    , directory
+    , jose
+    , frontend
+    , mtl
+    , mysql
+    , network
+    , obelisk-backend
+    , obelisk-route
+    , optparse-applicative
+    , persistent
+    , persistent-template
+    , persistent-mysql
+    , resource-pool
+    , servant-snap
+    , servant
+    , snap-core
+    , text
   exposed-modules:
     Backend
   other-modules:
-    Backend.AppData
+      AppData
+    , Handlers
+    , Options
   ghc-options: -Wall -Wredundant-constraints -Wincomplete-uni-patterns -Wincomplete-record-updates -O -fno-show-valid-hole-fits
 
 executable backend
@@ -26,8 +44,9 @@ executable backend
   ghc-options: -Wall -Wredundant-constraints -Wincomplete-uni-patterns -Wincomplete-record-updates -O -threaded -fno-show-valid-hole-fits
   if impl(ghcjs)
     buildable: False
-  build-depends: base
-               , backend
-               , common
-               , frontend
-               , obelisk-backend
+  build-depends:
+      base
+    , backend
+    , common
+    , frontend
+    , obelisk-backend
