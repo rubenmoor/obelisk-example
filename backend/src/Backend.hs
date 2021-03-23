@@ -35,9 +35,6 @@ import           GHC.Base                  (undefined)
 import           Handlers                  (handlers)
 import           Obelisk.Backend           (Backend (..))
 import           Obelisk.Route             (pattern (:/))
-import           Options                   (Options (..), parseMyOptions)
-import           Options.Applicative       (execParser, fullDesc, helper, info,
-                                            progDesc, (<**>))
 -- use obelisk's static mechanism instead
 -- import           Paths_backend             (getDataFileName)
 import           Servant                   ((:<|>) (..), serveDirectory)

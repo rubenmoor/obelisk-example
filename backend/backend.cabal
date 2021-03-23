@@ -21,7 +21,6 @@ library
     , network
     , obelisk-backend
     , obelisk-route
-    , optparse-applicative
     , persistent
     , persistent-template
     , persistent-mysql
@@ -35,7 +34,6 @@ library
   other-modules:
       AppData
     , Handlers
-    , Options
   ghc-options: -Wall -Wredundant-constraints -Wincomplete-uni-patterns -Wincomplete-record-updates -O -fno-show-valid-hole-fits
 
 executable backend
