@@ -1,0 +1,8 @@
+{
+  "paramDbHost"     : "localhost",
+  "paramDbUser"     : "podcast",
+  "paramDbPassword" : "password",
+  "paramDbDatabase" : "podcast",
+  "paramMediaDir"   : "media",
+  "paramUrl"        : "localhost:8000"
+}

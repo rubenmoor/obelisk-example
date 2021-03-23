@@ -13,27 +13,35 @@ library
     , aeson-pretty
     , bytestring
     , common
+    , data-default
     , directory
     , jose
     , frontend
+    , monad-logger
     , mtl
     , mysql
     , network
     , obelisk-backend
+    , obelisk-executable-config-lookup
     , obelisk-route
     , persistent
     , persistent-template
     , persistent-mysql
     , resource-pool
+    , resourcet
     , servant-snap
     , servant
     , snap-core
     , text
+    , time
   exposed-modules:
     Backend
   other-modules:
       AppData
+    , Config
     , Handlers
+    , Model
+    , Model.Custom
   ghc-options: -Wall -Wredundant-constraints -Wincomplete-uni-patterns -Wincomplete-record-updates -O -fno-show-valid-hole-fits
 
 executable backend

@@ -15,7 +15,6 @@ data EnvApplication = EnvApplication
   { envPool      :: Pool SqlBackend
   , envMediaDir  :: FilePath
   , envUrl       :: Text
-  , envPublicDir :: FilePath
   }
 
 type Handler a = ReaderT EnvApplication Snap a
