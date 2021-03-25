@@ -17,4 +17,4 @@ data EnvApplication = EnvApplication
   , envUrl       :: Text
   }
 
-type Handler a = ReaderT EnvApplication Snap a
+type Handler = ReaderT EnvApplication Snap

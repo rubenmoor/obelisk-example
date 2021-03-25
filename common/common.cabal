@@ -7,6 +7,7 @@ library
   hs-source-dirs: src
   build-depends:
       base
+    , aeson
     , bytestring
     , http-media
     , obelisk-route
@@ -14,6 +15,7 @@ library
     , servant
     , text
   exposed-modules:
-      Common
+      Auth
+    , Common
     , Route
   ghc-options: -Wall -Wredundant-constraints -Wincomplete-uni-patterns -Wincomplete-record-updates -O -fno-show-valid-hole-fits

@@ -1,9 +1,11 @@
-{-# LANGUAGE GADTs             #-}
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms   #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE NoImplicitPrelude   #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE PatternSynonyms     #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Backend where
 
@@ -16,9 +18,9 @@ import           Common                          (routes)
 import           Control.Applicative             (Applicative (pure))
 import           Control.Monad                   (Monad ((>>=)))
 import           Control.Monad.Reader            (ReaderT (runReaderT))
--- import           Control.Monad.Trans             (MonadIO (liftIO))
+import           Control.Monad.Trans             (MonadIO (liftIO))
 import           Crypto.JOSE                     (JWKSet (JWKSet))
-import           Crypto.JWT                      (Crv (P_384), KeyMaterialGenParam (ECGenParam),
+import           Crypto.JWT                      (Crv (P_384), JWK, KeyMaterialGenParam (ECGenParam),
                                                   defaultJWTValidationSettings,
                                                   genJWK)
 import qualified Data.Aeson                      as Aeson
@@ -44,8 +46,12 @@ import           Obelisk.Route                   (pattern (:/))
 import           Config                          (Params (..))
 import           Control.Monad.Logger            (NoLoggingT (..))
 import           Control.Monad.Trans.Resource    (runResourceT)
+import           Data.Aeson                      (FromJSON)
+import           Data.Text                       (Text)
+import           Data.Text.IO                    (putStrLn)
 import           Model                           (migrateAll)
-import           Obelisk.Configs                 (HasConfigs (getConfig),
+import           Obelisk.Configs                 (ConfigsT,
+                                                  HasConfigs (getConfig),
                                                   runConfigsT)
 import           Servant                         ((:<|>) (..), serveDirectory)
 import           Servant.Server                  (serveSnap)
@@ -53,7 +59,7 @@ import           Snap.Core                       (Snap)
 import           System.Directory                (doesFileExist)
 import           System.Exit                     (ExitCode (ExitFailure),
                                                   exitWith)
-import           System.IO                       (putStrLn)
+import           System.IO                       (IO)
 
 backendApp :: EnvApplication -> Snap ()
 backendApp = runReaderT $ serveSnap routes handlers
@@ -61,17 +67,11 @@ backendApp = runReaderT $ serveSnap routes handlers
 backend :: Backend BackendRoute FrontendRoute
 backend = Backend
   { _backend_run = \serve -> do
-    -- TODO: read key file from obelisk backend configuration
-    -- str <- liftIO $ Lazy.readFile optKeyFileName
-    -- jwk <- liftIO $ maybe (exitWith $ ExitFailure 1) pure $ Aeson.decode str
-    -- TODO: read connection info from configuration file
     cfgs <- getConfigs
-    mStr <- runConfigsT cfgs $ getConfig "backend/params"
-    let mParams = mStr >>= Aeson.decodeStrict
-    let exitWithFailure = do
-          putStrLn "Could not parse configuration"
-          exitWith $ ExitFailure 1
-    Params{..} <- maybe exitWithFailure pure mParams
+    (Params{..}, jwk :: JWK) <- runConfigsT cfgs $ do
+      params <- getConfigOrExit "backend/params"
+      jwk <- getConfigOrExit "backend/jwk"
+      pure (params, jwk)
     let connectInfo = defaultConnectInfo
           { connectHost = paramDbHost
           , connectUser = paramDbUser
@@ -95,3 +95,13 @@ backend = Backend
         (BackendRoutes        :/  _) -> backendApp env
   , _backend_routeEncoder = fullRouteEncoder
   }
+
+getConfigOrExit :: forall a. FromJSON a => Text -> ConfigsT IO a
+getConfigOrExit filename = do
+  mStr <- getConfig filename
+  str <- maybe (exitWithFailure $ "config " <> filename <> " not found") pure mStr
+  maybe (exitWithFailure $ "could not decode " <> filename) pure $ Aeson.decodeStrict str
+  where
+    exitWithFailure msg = liftIO $ do
+      putStrLn msg -- "Could not parse configuration"
+      exitWith $ ExitFailure 1

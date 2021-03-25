@@ -8,15 +8,25 @@ library
   build-depends:
       base
     , common
-    , obelisk-frontend
-    , obelisk-route
+    , containers
+    , data-default
     , jsaddle
-    , reflex-dom
+    , obelisk-frontend
     , obelisk-executable-config-lookup
     , obelisk-generated-static
+    , obelisk-route
+    , raw-strings-qq
+    , reflex-dom
+    , servant
+    , servant-reflex
     , text
+    , time
+    , transformers
+    , witherable
   exposed-modules:
     Frontend
+  other-modules:
+    Client
   ghc-options: -Wall -Wredundant-constraints -Wincomplete-uni-patterns -Wincomplete-record-updates -O -fno-show-valid-hole-fits
 
 executable frontend
@@ -25,11 +35,12 @@ executable frontend
   build-depends:
       base
     , common
+    , frontend
     , obelisk-frontend
+    , obelisk-generated-static
     , obelisk-route
     , reflex-dom
-    , obelisk-generated-static
-    , frontend
+    , time
   ghc-options: -threaded -O -Wall -Wredundant-constraints -Wincomplete-uni-patterns -Wincomplete-record-updates -fno-show-valid-hole-fits
   if impl(ghcjs)
     ghc-options: -dedupe

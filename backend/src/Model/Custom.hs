@@ -1,31 +1,42 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Model.Custom
   ( Visibility (..)
+  , Rank (..)
+  , Event (..)
   ) where
 
-import           Data.Bool              (otherwise)
-import           Data.Either            (Either (Left, Right))
-import           Data.Eq                (Eq ((==)))
-import           Data.Function          (($))
-import           Data.Monoid            ((<>))
-import           Database.Persist       (PersistField (..),
-                                         PersistValue (PersistText),
-                                         SqlType (SqlString))
-import           Database.Persist.MySQL (PersistFieldSql (..))
+import Data.Eq (Eq)
+import Data.Ord (Ord)
+import Text.Show (Show)
+import Text.Read (Read)
+import Database.Persist.TH (derivePersistField)
 
 data Visibility
   = VisibilityPublic
   | VisibilityHidden
+  deriving (Eq, Ord, Show, Read)
 
-instance PersistField Visibility where
-  toPersistValue VisibilityPublic = PersistText "public"
-  toPersistValue VisibilityHidden = PersistText "hidden"
-  fromPersistValue (PersistText t) | t == "public" = Right VisibilityPublic
-                                   | t == "hidden" = Right VisibilityHidden
-                                   | otherwise     = Left $ "No parse: " <> t
-  fromPersistValue _ = Left "No parse"
+derivePersistField "Visibility"
 
-instance PersistFieldSql Visibility where
-  sqlType _ = SqlString
+data Rank
+  = RankSmurf
+  | RankModerator
+  | RankAdmin
+  | RankOwner
+  deriving (Eq, Ord, Show, Read)
+
+derivePersistField "Rank"
+
+data Event
+  = EventPageView
+  | EventLogin
+  | EventLogout
+  | EventNewUser
+  | EventNewAlias
+  | EventNewEpisode
+  deriving (Eq, Ord, Show, Read)
+
+derivePersistField "Event"

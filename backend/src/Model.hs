@@ -1,9 +1,9 @@
+{-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DerivingStrategies         #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE QuasiQuotes                #-}
@@ -11,27 +11,25 @@
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
-{-# LANGUAGE UndecidableInstances       #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Model where
 
 import           Data.ByteString     (ByteString)
-import           Data.Default        (Default (..))
 import           Data.Text           (Text)
-import           Data.Time           (Day (ModifiedJulianDay), UTCTime (..),
-                                      secondsToDiffTime)
+import           Data.Time           (Day, UTCTime)
 import           Database.Persist.TH (mkMigrate, mkPersist, persistLowerCase,
                                       share, sqlSettings)
 
-import           Model.Custom        (Visibility (..))
+import           Model.Custom        (Visibility (..), Rank (..), Event (..))
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Episode
   title            Text
   slug             Text
-  UniqueSlug slug
+  UEpisodeSlug slug
   customIndex      Text
-  UniqueCustomIndex customIndex
+  UCustomIndex customIndex
   ftExtension      Text
   audioContentType Text
   thumbnailFile    FilePath
@@ -43,32 +41,24 @@ Episode
   created          UTCTime
   videoUrl         Text
   visibility       Visibility
-User
+  fkEventSource    EventSourceId
+User                             -- some real person
   name             Text
-  UniqueName name
+  UUserName name
+Alias                            -- one of several identities
+  name             Text
+  rank             Rank
+  fkUser           UserId
+  UAliasName name
 AuthPwd
   fkUser           UserId
   password         ByteString
-  UniqueFkUser fkUser
+  UAuthPwdFkUser fkUser
+Journal
+  fkEventSource    EventSourceId
+  fkUser           UserId
+  created          UTCTime
+  event            Event
+  description      Text
+EventSource
 |]
-
-instance Default Episode where
-  def =
-    let episodeTitle = ""
-        episodeSlug = ""
-        episodeCustomIndex = ""
-        episodeFtExtension = ""
-        episodeAudioContentType = ""
-        episodeThumbnailFile = ""
-        episodeDescriptionShort = ""
-        episodeDescriptionLong = ""
-        episodeDuration = 0
-        episodeFileSize = 0
-        episodePubdate = ModifiedJulianDay 0
-        episodeCreated = UTCTime
-          { utctDay = ModifiedJulianDay 0
-          , utctDayTime = secondsToDiffTime 0
-          }
-        episodeVideoUrl = ""
-        episodeVisibility = VisibilityHidden
-    in  Episode{..}

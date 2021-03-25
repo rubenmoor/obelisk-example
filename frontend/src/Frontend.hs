@@ -1,47 +1,138 @@
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE QuasiQuotes       #-}
+{-# LANGUAGE TypeApplications  #-}
 
 module Frontend where
 
-import Control.Monad
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
-import Language.Javascript.JSaddle (eval, liftJSM)
+import qualified Data.Map                 as Map
+import qualified Data.Text                as Text
+import           Text.RawString.QQ        (r)
 
-import Obelisk.Frontend
-import Obelisk.Configs
-import Obelisk.Route
-import Obelisk.Generated.Static
+import           Obelisk.Frontend         (Frontend (..))
+import           Obelisk.Generated.Static (static)
+import           Obelisk.Route            (R)
 
-import Reflex.Dom.Core
+import           Reflex.Dom.Core          (InputElement (..), blank, button, el,
+                                           elAttr, text, (=:))
 
-import Route
+import           Client                   (postEpisodeNew)
+import           Common                   (EpisodeNew (..), convertToFilename)
+import           Control.Applicative      (Applicative (pure, (<*>)))
+import           Control.Category         (Category ((.)))
+import           Control.Monad            ((=<<), Monad ((>>=)))
+import           Data.Default             (Default (def))
+import           Data.Either              (Either (..))
+import           Data.Function            (($), (&))
+import           Data.Functor             (Functor (fmap), (<$>))
+import           Data.Maybe               (Maybe (..), fromMaybe, maybe)
+import           Data.Monoid              ((<>))
+import           Data.Text                (Text, toUpper)
+import           Data.Tuple               (fst, snd)
+import           Data.Witherable          (mapMaybe)
+import           Reflex.Dom               (constDyn, prerender_, Reflex(never), Prerender(prerender), DomBuilder (inputElement),
+                                           MonadHold (holdDyn), dynText,
+                                           elDynAttr,
+                                           elementConfig_initialAttributes,
+                                           inputElementConfig_elementConfig,
+                                           inputElementConfig_initialValue,
+                                           (.~))
+import           Route                    (FrontendRoute)
+import           Servant.Common.Req       (reqFailure)
+import Data.Time (getCurrentTime, defaultTimeLocale, formatTime, UTCTime(..))
+import GHC.Base (undefined)
+import Control.Monad.IO.Class (MonadIO(liftIO))
+import Control.Monad.Trans.Class (MonadTrans(lift))
 
 
--- This runs in a monad that can be run on the client or the server.
--- To run code in a pure client or pure server context, use one of the
--- `prerender` functions.
+style :: Text
+style = [r|body {
+  font-family: 'Abel', sans-serif;
+  background-color: lightgray;
+  margin: 0;
+}|]
+
 frontend :: Frontend (R FrontendRoute)
 frontend = Frontend
   { _frontend_head = do
-      el "title" $ text "Obelisk Minimal Example"
-      elAttr "link" ("href" =: static @"main.css" <> "type" =: "text/css" <> "rel" =: "stylesheet") blank
+      elAttr "meta" ( "content" =: "text/html;charset=utf-8"
+                   <> "httpequiv" =: "content-type"
+                    ) blank
+      elAttr "meta" ( "content" =: "utf-8"
+                   <> "httpequiv" =: "encoding"
+                    ) blank
+      elAttr "link" ( "rel" =: "preconnect"
+                   <> "href" =: "https://fonts.gstatic.com"
+                    ) blank
+      elAttr "link" ( "href" =: "https://fonts.googleapis.com/css2?family=Abel&display=swap"
+                   <> "rel" =: "stylesheet"
+                    ) blank
+      -- Font Awesome 5.13 free content -->
+      elAttr "link" ( "rel" =: "stylesheet"
+                   <> "href" =: static @"FontAwesome/css/all.min.css"
+                    ) blank
+      el "title" $ text "serendipity.works"
+      el "style" $ text style
   , _frontend_body = do
+      btnLogin <- el "div" $ button "Login"
+
+      let input conf label id = do
+            elAttr "label" ("for" =: id) $ text label
+            el "br" blank
+            i <- inputElement $ conf
+                   & inputElementConfig_elementConfig
+                   . elementConfig_initialAttributes .~ ("id" =: id)
+            el "br" blank
+            let str = _inputElement_value i
+            pure $ fmap (\s -> if Text.null s then Nothing else Just s) str
+
+      el "h1" $ text "Create new episode"
+      let today = "todo" -- Text.pack $ formatTime defaultTimeLocale "%F" now
+      date <- input (def & inputElementConfig_initialValue .~ today) "Episode date: " "date"
+      customIndex <- input def "Custom index: " "customIndex"
+      title <- input def "Episode title: " "title"
+
+      text "Title: "
+      el "br" blank
+
+      -- dynamic title
+      let cfg = do
+            mc <- customIndex
+            mt <- title
+            let mTitle = do
+                  c <- mc
+                  t <- mt
+                  pure (Map.empty, "#" <> c <> " " <> t)
+            pure $ fromMaybe ("style" =: "font-style: italic", "empty") mTitle
+      elDynAttr "span" (fst <$> cfg) $ dynText (snd <$> cfg)
+
+      el "br" blank
+      text "Episode slug (no special chars allowed): "
+      el "br" blank
+      dynText $ do mt <- title
+                   let str = (convertToFilename . toUpper . fromMaybe "") mt
+                   md <- date
+                   pure $ fromMaybe "" md <> "-" <> str
+
+      el "br" blank
+      sendButton <- button "send"
+
+      let eitherEpisodeNew = do
+            mCustomIndex <- customIndex
+            mTitle       <- title
+            mDate        <- date
+            let mEpisodeNew = EpisodeNew <$> mCustomIndex <*> mTitle <*> mDate
+            pure $ maybe (Left "Missing required fields") Right mEpisodeNew
+      -- with auth
+      -- res <- postEpisodeNew (constDyn $ Left "no jwt") eitherEpisodeNew sendButton
+      elAttr "p" ("style" =: "color:red") $ prerender_ (text "loading") $ do
+        res <- lift $ postEpisodeNew eitherEpisodeNew sendButton
+        let err = mapMaybe reqFailure res
+        holdDyn "" err >>= dynText
+
       el "h1" $ text "Welcome to Obelisk!"
-      el "p" $ text $ T.pack "foooooo"
-
-      -- `prerender` and `prerender_` let you choose a widget to run on the server
-      -- during prerendering and a different widget to run on the client with
-      -- JavaScript. The following will generate a `blank` widget on the server and
-      -- print "Hello, World!" on the client.
-      prerender_ blank $ liftJSM $ void $ eval ("console.log('Hello, World!')" :: T.Text)
-
-      elAttr "img" ("src" =: static @"obelisk.jpg") blank
-      el "div" $ do
-        exampleConfig <- getConfig "common/example"
-        case exampleConfig of
-          Nothing -> text "No config file found in config/common/example"
-          Just s -> text $ T.decodeUtf8 s
-      return ()
+      el "p" $ text "foooooo"
+      pure ()
   }

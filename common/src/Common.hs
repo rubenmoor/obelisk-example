@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE EmptyDataDecls        #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
@@ -7,22 +8,51 @@
 
 module Common where
 
+import           Auth                     (CompactJWT, Credentials, RespLogin)
 import           Control.Applicative      (Applicative (pure))
 import           Control.Category         (Category (id))
+import           Data.Aeson               (FromJSON, ToJSON)
+import           Data.Bool                (Bool)
 import qualified Data.ByteString.Lazy     as Lazy
+import           Data.Data                (Proxy (Proxy))
+import           Data.Maybe               (Maybe)
+import           Data.Text                (Text, replace)
+import           GHC.Generics             (Generic)
 import           Network.HTTP.Media       ((//), (/:))
-import           Servant.API              ((:<|>) (..), (:>), Get)
+import           Servant.API              ((:<|>) (..), (:>), Get, JSON, Post,
+                                           ReqBody)
 import           Servant.API.ContentTypes (Accept (..), MimeRender (..),
                                            MimeUnrender (..))
-import Data.Data (Proxy(Proxy))
+import           Text.Read                (Read)
+import           Text.Show                (Show)
+import Data.Foldable (Foldable(foldl'))
 
 type Routes =
-       RoutesHandlers
-
-type RoutesHandlers =
-  RouteFeed
+       RouteFeed
+  :<|> RoutesApi
 
 type RouteFeed = "feed.xml" :> Get '[XML] Lazy.ByteString
+
+type RoutesApi =
+       "auth" :> (RouteGrantAuthPwd :<|> RouteNewUser :<|> RouteDoesUserExist)
+  :<|> "epsiode" :> RouteEpisodeNew
+
+type RouteGrantAuthPwd  = "login"  :> ReqBody '[JSON] Credentials :> Post '[JSON] RespLogin
+type RouteNewUser       = "new"    :> ReqBody '[JSON] Credentials :> Post '[JSON] (Maybe CompactJWT)
+type RouteDoesUserExist = "exists" :> ReqBody '[JSON] Text        :> Post '[JSON] Bool
+
+-- episode
+
+type RouteEpisodeNew = "new" :> ReqBody '[JSON] EpisodeNew :> Post '[JSON] ()
+
+data EpisodeNew = EpisodeNew
+  { newCustomIndex :: Text
+  , newTitle       :: Text
+  , newDate        :: Text
+  } deriving (Read, Show, Generic)
+
+instance FromJSON EpisodeNew
+instance ToJSON EpisodeNew
 
 routes :: Proxy Routes
 routes = Proxy
@@ -37,3 +67,40 @@ instance MimeRender XML Lazy.ByteString where
 
 instance MimeUnrender XML Lazy.ByteString where
   mimeUnrender _ bs = pure bs
+
+convertToFilename :: Text -> Text
+convertToFilename str =
+  let map = [ ("Ä", "A")
+            , ("Ö", "O")
+            , ("Ü", "U")
+            , ("ß", "SS")
+            , ("?", "_")
+            , ("!", "_")
+            , (",", "_")
+            , (";", "_")
+            , (":", "_")
+            , ("'", "_")
+            , ("=", "_")
+            , ("<", "_")
+            , (">", "_")
+            , ("/", "_")
+            , ("\\", "_")
+            , ("\"", "_")
+            , ("&", "_")
+            , ("@", "_")
+            , ("%", "_")
+            , ("+", "_")
+            , ("*", "_")
+            , ("$", "_")
+            , (" ", "_")
+            , ("(", "_")
+            , (")", "_")
+            , ("É", "E")
+            , ("Á", "A")
+            , ("Í", "I")
+            , ("È", "E")
+            , ("À", "A")
+            , ("Ì", "I")
+            ]
+      acc str' (s, t) = replace s t str'
+  in  foldl' acc str map
