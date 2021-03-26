@@ -35,15 +35,19 @@ import           Text.Show                (Show)
 import Servant.API.Capture (Capture)
 
 type Routes =
-       RouteFeed
+       RouteShow
   :<|> RoutesApi
 
 
-type RouteFeed = "rss" :> Capture "podcast_id" Text :> Get '[XML] Lazy.ByteString
+type RouteShow = "show" :> Capture "podcast_id" Text :>
+  ( "feed.xml" :> Get '[XML] Lazy.ByteString
+  )
 
 type RoutesApi = "api" :>
   (     "auth" :> (RouteGrantAuthPwd :<|> RouteNewUser :<|> RouteDoesUserExist)
-   :<|> "epsiode" :> RouteEpisodeNew
+   :<|> "epsiode" :> Capture "podcast_id" Text :>
+    ( RouteEpisodeNew
+    )
   )
 
 type RouteGrantAuthPwd  = "login"  :> ReqBody '[JSON] Credentials :> Post '[JSON] RespLogin

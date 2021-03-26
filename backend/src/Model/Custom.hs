@@ -22,8 +22,7 @@ data Visibility
 derivePersistField "Visibility"
 
 data Rank
-  = RankSmurf
-  | RankModerator
+  = RankModerator
   | RankAdmin
   | RankOwner
   deriving (Eq, Ord, Show, Read)

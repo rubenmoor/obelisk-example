@@ -27,7 +27,20 @@ import           Database.Persist.TH (mkMigrate, mkPersist, persistLowerCase,
 import           Model.Custom        (Visibility (..), Rank (..), Event (..))
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
+Podcast
+  identifier       Text
+  UPodcastIdentifier identifier
+  title            Text
+  description      Text
+  copyright        Text
+  email            Text
+  pubDate          UTCTime
+  itunesSubtitle   Text
+  itunesSummary    Text
+  authors          Text
+  itunesOwnerNames Text
 Episode
+  fkPodcast        PodcastId
   title            Text
   slug             Text
   UEpisodeSlug slug
@@ -48,11 +61,16 @@ Episode
 User                             -- some real person
   name             Text
   UUserName name
+  isSiteAmdin      Bool
 Alias                            -- one of several identities
   name             Text
-  rank             Rank
   fkUser           UserId
   UAliasName name
+Clearance
+  fkAlias          AliasId
+  fkPodcast        PodcastId
+  UClearance fkAlias fkPodcast
+  rank             Rank
 AuthPwd
   fkUser           UserId
   password         ByteString

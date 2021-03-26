@@ -37,7 +37,7 @@ data BackendRoute :: * -> * where
   -- | Used to handle unparseable routes.
   BackendRoute_Missing :: BackendRoute ()
   BackendRoute_Api :: BackendRoute PageName
-  BackendRoute_RSS :: BackendRoute PageName
+  BackendRoute_Show :: BackendRoute PageName
   -- You can define any routes that will be handled specially by the backend here.
   -- i.e. These do not serve the frontend, but do something different, such as serving static files.
 
@@ -52,7 +52,7 @@ fullRouteEncoder = mkFullRouteEncoder
   (\case
       BackendRoute_Missing -> PathSegment "missing" $ unitEncoder mempty
       BackendRoute_Api -> PathSegment "api" id
-      BackendRoute_RSS -> PathSegment "rss" id
+      BackendRoute_Show -> PathSegment "show" id
   )
   (\case
       FrontendRoute_Main -> PathEnd $ unitEncoder mempty)

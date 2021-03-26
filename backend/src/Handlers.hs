@@ -30,9 +30,9 @@ import           Data.Either              (Either (Left, Right))
 import           Data.Eq                  (Eq ((==)))
 import           Data.FileEmbed           (makeRelativeToProject)
 import           Data.Function            (($))
-import           Data.Functor             ((<$>))
+import           Data.Functor             (Functor(fmap), (<$>))
 import           Data.Int                 (Int)
-import           Data.List                (sortOn)
+import           Data.List                (map, sortOn)
 import           Data.Maybe               (Maybe (Just, Nothing), maybe)
 import           Data.Monoid              ((<>))
 import           Data.Ord                 (Down (Down))
@@ -43,12 +43,12 @@ import           Data.Time                (defaultTimeLocale, formatTime,
                                            getCurrentTime, parseTimeM,
                                            rfc822DateFormat)
 import           Data.Tuple               (snd)
-import           Database.Gerippe         (PersistStoreWrite (insert, insert_),
+import           Database.Gerippe         (Entity, Entity(entityVal), getWhere, PersistUniqueRead(getBy), PersistStoreWrite (insert, insert_),
                                            PersistentSqlException, getAllValues)
 import           Database.Persist.MySQL   (runSqlPool)
-import           Model                    (Episode (..), Event (..),
-                                           EventSource (..), Journal (..),
-                                           Visibility (..))
+import           Model                    --(Unique(UPodcastIdentifier), Episode (..), Event (..),
+                                          -- EventSource (..), Journal (..),
+                                          -- Visibility (..))
 import qualified Model
 import           Safe                     (headMay)
 import           Servant.API              ((:<|>) (..))
@@ -60,6 +60,7 @@ import           Text.Heterocephalus      (compileHtmlFile)
 import Text.Show (Show(show))
 import qualified Data.ByteString.Lazy.UTF8 as BSU
 import Data.Text.IO (putStrLn)
+import Database.Gerippe (Entity(..))
 
 default(Text)
 
@@ -81,8 +82,10 @@ runDb action = do
 
 handleFeedXML :: Text -> Handler Lazy.ByteString
 handleFeedXML podcastId = do
-  unless (podcastId == "fullserendipity.xml") $ throwError err404
-  episodeList <- runDb getAllValues
+  mShow <- runDb $ getBy $ UPodcastIdentifier podcastId
+  theShow <- maybe (throwError err404) pure mShow
+  let Entity key Podcast{..} = theShow
+  episodeList <- runDb $ map entityVal <$> getWhere EpisodeFkPodcast key
   url <- asks envUrl
   let contents = renderMarkup (
         let title = "full serendipity"
@@ -157,8 +160,11 @@ handleNewUser Credentials{..} = pure Nothing
 handleDoesUserExist :: Text -> Handler Bool
 handleDoesUserExist str = pure False
 
-handleEpisodeNew :: EpisodeNew -> Handler ()
-handleEpisodeNew EpisodeNew{..} = do
+handleEpisodeNew :: Text -> EpisodeNew -> Handler ()
+handleEpisodeNew theShow EpisodeNew{..} = do
+  mShow <- runDb $ getBy $ UPodcastIdentifier theShow
+  episodeFkPodcast <- maybe (throwError $ err500 { errBody = "show not found" })
+                            (pure . entityKey) mShow
   now <- liftIO getCurrentTime
   when (newTitle == "") $
     throwError $ err400 { errBody = "title field is mandatory" }
