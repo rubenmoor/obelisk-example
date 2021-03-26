@@ -31,12 +31,11 @@ data Rank
 derivePersistField "Rank"
 
 data Event
-  = EventPageView
+  = EventView
   | EventLogin
   | EventLogout
-  | EventNewUser
-  | EventNewAlias
-  | EventNewEpisode
+  | EventCreation
+  | EventEdit
   deriving (Eq, Ord, Show, Read)
 
 derivePersistField "Event"

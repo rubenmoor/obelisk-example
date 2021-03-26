@@ -9,7 +9,7 @@
 
 module Backend where
 
-import           Route                           (BackendRoute (BackendRoute_Missing, BackendRoutes),
+import           Route                           (BackendRoute(BackendRoute_RSS, BackendRoute_Missing, BackendRoute_Api),
                                                   FrontendRoute,
                                                   fullRouteEncoder)
 
@@ -91,8 +91,8 @@ backend = Backend
             }
       NoLoggingT $ serve $ \case
         (BackendRoute_Missing :/ ()) -> pure ()
-        -- TODO: serve public dir via obelisk
-        (BackendRoutes        :/  _) -> backendApp env
+        (BackendRoute_Api        :/  _) -> backendApp env
+        (BackendRoute_RSS        :/  _) -> backendApp env
   , _backend_routeEncoder = fullRouteEncoder
   }
 

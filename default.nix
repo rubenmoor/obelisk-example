@@ -27,9 +27,10 @@ project ./. ({ ... }: {
   ios.bundleIdentifier = "systems.obsidian.obelisk.examples.minimal";
   ios.bundleName = "Obelisk Minimal Example";
   overrides = self: super: {
-    servant-snap = (import ./dep/servant-snap) self super;
+    gerippe = self.callPackage ../gerippe {};
     hspec-snap = (import ./dep/hspec-snap) self super;
-    servant-reflex = self.callPackage ../servant-reflex {};
     persistent = self.callHackage "persistent" "2.9.2" {};
+    servant-reflex = self.callPackage ../servant-reflex {};
+    servant-snap = (import ./dep/servant-snap) self super;
   };
 })

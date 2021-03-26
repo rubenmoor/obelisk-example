@@ -13,7 +13,10 @@
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Model where
+module Model
+  ( module Model
+  , module Model.Custom
+  ) where
 
 import           Data.ByteString     (ByteString)
 import           Data.Text           (Text)
@@ -56,7 +59,7 @@ AuthPwd
   UAuthPwdFkUser fkUser
 Journal
   fkEventSource    EventSourceId
-  fkUser           UserId
+  fkUser           UserId Maybe
   created          UTCTime
   event            Event
   description      Text

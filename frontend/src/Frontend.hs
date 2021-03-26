@@ -124,7 +124,7 @@ frontend = Frontend
             mTitle       <- title
             mDate        <- date
             let mEpisodeNew = EpisodeNew <$> mCustomIndex <*> mTitle <*> mDate
-            pure $ maybe (Left "Missing required fields") Right mEpisodeNew
+            pure $ maybe (Left "all fields are required") Right mEpisodeNew
       -- with auth
       -- res <- postEpisodeNew (constDyn $ Left "no jwt") eitherEpisodeNew sendButton
       elAttr "p" ("style" =: "color:red") $ prerender_ (text "loading") $ do

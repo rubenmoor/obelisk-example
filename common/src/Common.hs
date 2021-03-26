@@ -15,27 +15,36 @@ import           Data.Aeson               (FromJSON, ToJSON)
 import           Data.Bool                (Bool)
 import qualified Data.ByteString.Lazy     as Lazy
 import           Data.Data                (Proxy (Proxy))
+import           Data.Foldable            (Foldable (foldl'))
+import           Data.Function            (($))
+import           Data.Int                 (Int)
 import           Data.Maybe               (Maybe)
 import           Data.Text                (Text, replace)
+import qualified Data.Text                as Text
 import           GHC.Generics             (Generic)
+import           GHC.Num                  (Num ((*)))
+import           GHC.Real                 (Integral (div, mod))
 import           Network.HTTP.Media       ((//), (/:))
 import           Servant.API              ((:<|>) (..), (:>), Get, JSON, Post,
                                            ReqBody)
 import           Servant.API.ContentTypes (Accept (..), MimeRender (..),
                                            MimeUnrender (..))
+import           Text.Printf              (printf)
 import           Text.Read                (Read)
 import           Text.Show                (Show)
-import Data.Foldable (Foldable(foldl'))
+import Servant.API.Capture (Capture)
 
 type Routes =
        RouteFeed
   :<|> RoutesApi
 
-type RouteFeed = "feed.xml" :> Get '[XML] Lazy.ByteString
 
-type RoutesApi =
-       "auth" :> (RouteGrantAuthPwd :<|> RouteNewUser :<|> RouteDoesUserExist)
-  :<|> "epsiode" :> RouteEpisodeNew
+type RouteFeed = "rss" :> Capture "podcast_id" Text :> Get '[XML] Lazy.ByteString
+
+type RoutesApi = "api" :>
+  (     "auth" :> (RouteGrantAuthPwd :<|> RouteNewUser :<|> RouteDoesUserExist)
+   :<|> "epsiode" :> RouteEpisodeNew
+  )
 
 type RouteGrantAuthPwd  = "login"  :> ReqBody '[JSON] Credentials :> Post '[JSON] RespLogin
 type RouteNewUser       = "new"    :> ReqBody '[JSON] Credentials :> Post '[JSON] (Maybe CompactJWT)
@@ -104,3 +113,10 @@ convertToFilename str =
             ]
       acc str' (s, t) = replace s t str'
   in  foldl' acc str map
+
+formatDuration :: Int -> Text
+formatDuration d =
+  let seconds = d `mod` 60
+      minutes = (d `div` 60) `mod` 60
+      hours = d `div` (60 * 60)
+  in  Text.pack $ printf "%02d:%02d:%02d" hours minutes seconds
