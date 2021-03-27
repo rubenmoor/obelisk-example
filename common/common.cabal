@@ -15,7 +15,7 @@ library
     , servant
     , text
   exposed-modules:
-      Auth
-    , Common
+      Common
+    , Common.Auth
     , Route
   ghc-options: -Wall -Wredundant-constraints -Wincomplete-uni-patterns -Wincomplete-record-updates -O -fno-show-valid-hole-fits

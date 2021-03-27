@@ -1,9 +1,10 @@
-{-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE EmptyDataDecls             #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE QuasiQuotes                #-}
@@ -11,11 +12,12 @@
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Model
   ( module Model
   , module Model.Custom
+  , Unique (..)
+  , EntityField (..)
   ) where
 
 import           Data.ByteString     (ByteString)
@@ -24,7 +26,9 @@ import           Data.Time           (Day, UTCTime)
 import           Database.Persist.TH (mkMigrate, mkPersist, persistLowerCase,
                                       share, sqlSettings)
 
-import           Model.Custom        (Visibility (..), Rank (..), Event (..))
+import           Database.Gerippe    (PersistEntity (EntityField, Unique))
+import           Model.Custom        (Event (..), Rank (..), Subject (..),
+                                      Visibility (..))
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Podcast
@@ -34,11 +38,13 @@ Podcast
   description      Text
   copyright        Text
   email            Text
+  licence          Text
   pubDate          UTCTime
   itunesSubtitle   Text
   itunesSummary    Text
   authors          Text
   itunesOwnerNames Text
+  keywords         Text
 Episode
   fkPodcast        PodcastId
   title            Text
@@ -62,6 +68,7 @@ User                             -- some real person
   name             Text
   UUserName name
   isSiteAmdin      Bool
+  fkEventSource    EventSourceId
 Alias                            -- one of several identities
   name             Text
   fkUser           UserId
@@ -73,12 +80,13 @@ Clearance
   rank             Rank
 AuthPwd
   fkUser           UserId
-  password         ByteString
+  password         Text
   UAuthPwdFkUser fkUser
 Journal
   fkEventSource    EventSourceId
-  fkUser           UserId Maybe
+  fkAlias          AliasId Maybe
   created          UTCTime
+  subject          Subject
   event            Event
   description      Text
 EventSource

@@ -6,7 +6,7 @@
 
 module Client where
 
-import           Auth           (CompactJWT, Credentials (..), RespLogin)
+import           Common.Auth           (CompactJWT, Credentials (..))
 import           Common         (EpisodeNew, RoutesApi)
 import           Data.Bool      (Bool)
 import           Data.Data      (Proxy (..))
@@ -22,7 +22,7 @@ postAuthenticate
   :: SupportsServantReflex t m
   => Dynamic t (Either Text Credentials)
   -> Event t ()
-  -> m (Event t (ReqResult () RespLogin))
+  -> m (Event t (ReqResult () (Maybe CompactJWT)))
 
 postAuthNew
   :: SupportsServantReflex t m

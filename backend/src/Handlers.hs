@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds            #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
+{-# LANGUAGE LambdaCase           #-}
 {-# LANGUAGE LiberalTypeSynonyms  #-}
 {-# LANGUAGE NoImplicitPrelude    #-}
 {-# LANGUAGE OverloadedStrings    #-}
@@ -12,55 +13,60 @@ module Handlers
   ( handlers
   ) where
 
-import           AppData                  (DbAction, EnvApplication (..),
-                                           Handler)
-import           Auth                     (CompactJWT, Credentials (..),
-                                           LoginFailure (..), RespLogin (..))
-import           Common                   (EpisodeNew (..), Routes,
-                                           convertToFilename, formatDuration)
-import           Control.Applicative      (Applicative (pure))
-import           Control.Category         (Category ((.)))
-import           Control.Exception.Lifted        (evaluate, handle, catch)
-import           Control.Monad            (unless, Monad ((>>=)), when)
-import           Control.Monad.IO.Class   (MonadIO (liftIO))
-import           Control.Monad.Reader     (asks)
-import           Data.Bool                (Bool (..))
-import qualified Data.ByteString.Lazy     as Lazy
-import           Data.Either              (Either (Left, Right))
-import           Data.Eq                  (Eq ((==)))
-import           Data.FileEmbed           (makeRelativeToProject)
-import           Data.Function            (($))
-import           Data.Functor             (Functor(fmap), (<$>))
-import           Data.Int                 (Int)
-import           Data.List                (map, sortOn)
-import           Data.Maybe               (Maybe (Just, Nothing), maybe)
-import           Data.Monoid              ((<>))
-import           Data.Ord                 (Down (Down))
-import           Data.Text                (Text, breakOn, drop, replace,
-                                           toUpper)
-import qualified Data.Text                as Text
-import           Data.Time                (defaultTimeLocale, formatTime,
-                                           getCurrentTime, parseTimeM,
-                                           rfc822DateFormat)
-import           Data.Tuple               (snd)
-import           Database.Gerippe         (Entity, Entity(entityVal), getWhere, PersistUniqueRead(getBy), PersistStoreWrite (insert, insert_),
-                                           PersistentSqlException, getAllValues)
-import           Database.Persist.MySQL   (runSqlPool)
-import           Model                    --(Unique(UPodcastIdentifier), Episode (..), Event (..),
+import           AppData                   (DbAction, EnvApplication (..),
+                                            Handler)
+import           Common                    (EpisodeNew (..), Routes,
+                                            convertToFilename, formatDuration)
+import           Common.Auth               (CompactJWT, Credentials (..))
+import           Control.Applicative       (Applicative (pure))
+import           Control.Category          (Category ((.)))
+import           Control.Exception.Lifted  (catch, evaluate)
+import           Control.Monad             (Monad ((>>=)), when)
+import           Control.Monad.IO.Class    (MonadIO (liftIO))
+import           Control.Monad.Reader      (asks)
+import           Data.Bool                 (Bool (..))
+import qualified Data.ByteString.Lazy      as Lazy
+import           Data.Eq                   (Eq ((==)))
+import           Data.FileEmbed            (makeRelativeToProject)
+import           Data.Function             (($))
+import           Data.Functor              ((<$>))
+import           Data.Int                  (Int)
+import           Data.List                 (map, null, sortOn)
+import           Data.Maybe                (Maybe (Just, Nothing), isJust,
+                                            maybe)
+import           Data.Monoid               ((<>))
+import           Data.Ord                  (Down (Down))
+import           Data.Text                 (Text, breakOn, drop, replace,
+                                            toUpper)
+import qualified Data.Text                 as Text
+import           Data.Time                 (defaultTimeLocale, formatTime,
+                                            getCurrentTime, parseTimeM)
+import           Data.Tuple                (snd)
+import           Database.Gerippe          (Entity (..),
+                                            PersistStoreWrite (insert, insert_),
+                                            PersistUniqueRead (getBy),
+                                            PersistentSqlException, getAll, getWhere)
+import           Database.Persist.MySQL    (runSqlPool)
+import           Model                     (AuthPwd (..), EntityField (..),
+                                            Episode (..), Event (..),
+                                            EventSource (..), Journal (..),
+                                            Podcast (..), Subject (..),
+                                            Unique (..), User (..),
+                                            Visibility (..))
                                           -- EventSource (..), Journal (..),
                                           -- Visibility (..))
-import qualified Model
-import           Safe                     (headMay)
-import           Servant.API              ((:<|>) (..))
-import           Servant.Server           (err404, err500, HasServer (ServerT),
-                                           ServantErr (errBody), err400,
-                                           throwError)
-import           Text.Blaze.Renderer.Utf8 (renderMarkup)
-import           Text.Heterocephalus      (compileHtmlFile)
-import Text.Show (Show(show))
 import qualified Data.ByteString.Lazy.UTF8 as BSU
-import Data.Text.IO (putStrLn)
-import Database.Gerippe (Entity(..))
+import           Data.Password             (PasswordHash, PasswordCheck (..))
+import           Data.Password.Argon2      (checkPassword, PasswordHash (..),
+                                            hashPassword, mkPassword)
+import           Safe                      (headMay)
+import           Servant.API               ((:<|>) (..))
+import           Servant.Server            (HasServer (ServerT),
+                                            ServantErr (errBody), err400,
+                                            err404, err500, throwError)
+import           Text.Blaze.Renderer.Utf8  (renderMarkup)
+import           Text.Heterocephalus       (compileHtmlFile)
+import           Text.Show                 (Show (show))
 
 default(Text)
 
@@ -87,28 +93,19 @@ handleFeedXML podcastId = do
   let Entity key Podcast{..} = theShow
   episodeList <- runDb $ map entityVal <$> getWhere EpisodeFkPodcast key
   url <- asks envUrl
-  let contents = renderMarkup (
-        let title = "full serendipity"
-            img = "podcast-logo.jpg"
-            imgUrl = url <> img
-            description = "Wir reden hier über Themen"
-            copyright = "Rubm & Luke"
-            email = "luke.rubm@gmail.com (Luke & Rubm)"
-            pubDate = "Thu, 17 Dec 2020 02:00:00 GMT"
-            itunesSubtitle = "Wir reden hier über Themen"
-            itunesSummary = "Wir reden hier über Themen"
-            authors = "Luke & Rubm"
-            itunesOwnerNames = "Luke and Rubm"
-            episodeData = getEpisodeFeedData url <$>
-              sortOn  (Down . episodeCreated) episodeList
-            latestDate = maybe pubDate efdRFC822 $ headMay episodeData
-        in  $(makeRelativeToProject "feed.xml.tpl" >>= compileHtmlFile))
-  pure contents
+  -- TODO: podcastLicence: https://creativecommons.org/licenses/by-nc-nd/4.0/
+  -- TODO: podcastKeywords: Philosophie, Moral, Kolumbien
+  let podcastUrl = url <> "/" <> podcastId
+      imgUrl = podcastUrl <> "/podcast-logo.jpg"
+      pubDate = toRfc822 podcastPubDate
+      episodeData = getEpisodeFeedData url <$>
+        sortOn  (Down . episodeCreated) episodeList
+      latestDate = maybe pubDate efdRFC822 $ headMay episodeData
+  pure $ renderMarkup $(makeRelativeToProject "feed.xml.tpl" >>= compileHtmlFile)
   where
     getEpisodeFeedData :: Text -> Model.Episode -> EpisodeFeedData
     getEpisodeFeedData url Model.Episode{..} =
-      let efdRFC822 = replace "UTC" "UT" $
-            Text.pack $ formatTime defaultTimeLocale rfc822DateFormat episodeCreated
+      let efdRFC822 = toRfc822 episodeCreated
           efdSlug = episodeSlug
           efdFtExtension = episodeFtExtension
           efdAudioFileUrl = mkFileUrl url efdFtExtension efdSlug
@@ -134,6 +131,10 @@ handleFeedXML podcastId = do
           <> filetypeExtension
           <> "/" <> mediaLink' <> "/"
           <> slug <> filetypeExtension
+    toRfc822 =
+        replace "UTC" "UT"
+      . Text.pack
+      . formatTime defaultTimeLocale "%a, %-d %b %Y %H:%M:%S %Z"
 
 data EpisodeFeedData = EpisodeFeedData
     { efdRFC822            :: Text
@@ -151,14 +152,40 @@ data EpisodeFeedData = EpisodeFeedData
     }
 
 
-handleGrantAuthPwd :: Credentials -> Handler RespLogin
-handleGrantAuthPwd Credentials{..} = pure $ RespLoginFailure LoginFailureWrongPassword
+handleGrantAuthPwd :: Credentials -> Handler (Maybe CompactJWT)
+handleGrantAuthPwd Credentials{..} = do -- pure $ RespLoginFailure LoginFailureWrongPassword
+  mUser <- runDb (getBy $ UUserName credName)
+  user <- maybe (throwError $ err400 { errBody = "user does not exist" }) pure mUser
+  mAuth <- runDb (getBy $ UAuthPwdFkUser $ entityKey user)
+  Entity _ AuthPwd{..} <- maybe (throwError $ err400 { errBody = "not registered with password"}) pure mAuth
+  case checkPassword (mkPassword credPassword) (PasswordHash authPwdPassword) of
+    PasswordCheckSuccess -> pure Nothing
+    PasswordCheckFail    -> pure Nothing
 
 handleNewUser :: Credentials -> Handler (Maybe CompactJWT)
-handleNewUser Credentials{..} = pure Nothing
+handleNewUser Credentials{..} = do
+  when (Text.null credPassword) $
+    throwError $ err400 { errBody = "Password cannot be empty" }
+  first <- runDb $ (null :: [Entity User] -> Bool) <$> getAll
+  eventSourceId <- runDb $ insert EventSource
+  user <- runDb $ insert $ User credName first eventSourceId
+  password <- unPasswordHash <$> hashPassword (mkPassword credPassword)
+  runDb $ insert_ $ AuthPwd user password
+  now <- liftIO getCurrentTime
+  let journalFkAlias = Nothing
+      journalCreated = now
+      journalEvent = EventCreation
+      journalDescription = ""
+      journalSubject = SubjectUser
+      journalFkEventSource = eventSourceId
+  runDb $ insert_ Journal{..}
+  pure Nothing
+  -- insert user
+  -- insert authpwd
+  -- insert journal
 
 handleDoesUserExist :: Text -> Handler Bool
-handleDoesUserExist str = pure False
+handleDoesUserExist str = runDb $ isJust <$> getBy (UUserName str)
 
 handleEpisodeNew :: Text -> EpisodeNew -> Handler ()
 handleEpisodeNew theShow EpisodeNew{..} = do
@@ -190,8 +217,10 @@ handleEpisodeNew theShow EpisodeNew{..} = do
       episodeFkEventSource = eventSourceId
   runDb $ insert_ Episode{..}
   let journalFkEventSource = eventSourceId
-      journalFkUser = Nothing
+      -- TODO: correct alias
+      journalFkAlias = Nothing
       journalCreated = now
       journalEvent = EventCreation
       journalDescription = ""
+      journalSubject = SubjectEpisode
   runDb $ insert_ Journal{..}

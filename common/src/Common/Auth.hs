@@ -1,11 +1,9 @@
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Auth
+module Common.Auth
   ( CompactJWT (..)
   , Credentials (..)
-  , RespLogin (..)
-  , LoginFailure (..)
   ) where
 
 import           Data.Aeson   (FromJSON, ToJSON)
@@ -23,21 +21,3 @@ data Credentials = Credentials
 
 instance FromJSON Credentials
 instance ToJSON Credentials
-
--- login response type
-
-data RespLogin
-  = RespLoginSuccess CompactJWT
-  | RespLoginFailure LoginFailure
-  deriving (Eq, Show, Generic)
-
-instance FromJSON RespLogin
-instance ToJSON RespLogin
-
-data LoginFailure
-  = LoginFailureDoesNotExist
-  | LoginFailureWrongPassword
-  deriving (Eq, Show, Generic)
-
-instance FromJSON LoginFailure
-instance ToJSON LoginFailure

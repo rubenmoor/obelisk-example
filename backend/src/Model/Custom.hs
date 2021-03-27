@@ -6,6 +6,7 @@ module Model.Custom
   ( Visibility (..)
   , Rank (..)
   , Event (..)
+  , Subject (..)
   ) where
 
 import Data.Eq (Eq)
@@ -38,3 +39,12 @@ data Event
   deriving (Eq, Ord, Show, Read)
 
 derivePersistField "Event"
+
+-- subject of journal entry
+data Subject
+  = SubjectUser -- cases: new user, user changes alias or password, receives new clearance
+  | SubjectEpisode
+  | SubjectPodcast
+  deriving (Eq, Ord, Show, Read)
+
+derivePersistField "Subject"

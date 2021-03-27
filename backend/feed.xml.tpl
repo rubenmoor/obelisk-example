@@ -7,33 +7,33 @@
      version="2.0">
 
     <channel>
-        <title>#{title}</title>
-        <link>#{url}</link>
+        <title>#{podcastTitle}</title>
+        <link>#{podcastUrl}</link>
         <language>en-us</language>
         <atom:link href="#{url}/feed.xml"
                    rel="self"
                    type="application/rss+xml"/>
-        <copyright>#{copyright}</copyright>
-        <description>#{description}</description>
-        <managingEditor>#{email}</managingEditor>
-        <webMaster>#{email}</webMaster>
-        <creativeCommons:license>https://creativecommons.org/licenses/by-nc-nd/4.0/</creativeCommons:license>
+        <copyright>#{podcastCopyright}</copyright>
+        <description>#{podcastDescription}</description>
+        <managingEditor>#{podcastEmail}</managingEditor>
+        <webMaster>#{podcastEmail}</webMaster>
+        <creativeCommons:license>#{podcastLicence}</creativeCommons:license>
         <pubDate>#{pubDate}</pubDate>
         <lastBuildDate>#{latestDate}</lastBuildDate>
         <image>
             <url>#{imgUrl}</url>
-            <title>#{title}</title>
-            <link>#{url}</link>
+            <title>#{podcastTitle}</title>
+            <link>#{podcastUrl}</link>
         </image>
         <docs>http://www.rssboard.org/rss-specification</docs>
-        <itunes:subtitle>#{itunesSubtitle}</itunes:subtitle>
-        <itunes:author>#{authors}</itunes:author>
-        <itunes:summary>#{itunesSummary}</itunes:summary>
-        <itunes:keywords>Philosophie, Moral, Kolumbien</itunes:keywords>
+        <itunes:subtitle>#{podcastItunesSubtitle}</itunes:subtitle>
+        <itunes:author>#{podcastAuthors}</itunes:author>
+        <itunes:summary>#{podcastItunesSummary}</itunes:summary>
+        <itunes:keywords>${podcastKeywords}</itunes:keywords>
         <itunes:block>yes</itunes:block>
         <itunes:owner>
-            <itunes:name><![CDATA[#{itunesOwnerNames}]]></itunes:name>
-            <itunes:email>#{email}</itunes:email>
+            <itunes:name><![CDATA[#{podcastItunesOwnerNames}]]></itunes:name>
+            <itunes:email>#{podcastEmail}</itunes:email>
         </itunes:owner>
         <itunes:image href="#{imgUrl}" />
         <itunes:category text="Technology" />

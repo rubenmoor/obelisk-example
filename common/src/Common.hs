@@ -8,7 +8,7 @@
 
 module Common where
 
-import           Auth                     (CompactJWT, Credentials, RespLogin)
+import           Common.Auth              (CompactJWT, Credentials)
 import           Control.Applicative      (Applicative (pure))
 import           Control.Category         (Category (id))
 import           Data.Aeson               (FromJSON, ToJSON)
@@ -27,12 +27,12 @@ import           GHC.Real                 (Integral (div, mod))
 import           Network.HTTP.Media       ((//), (/:))
 import           Servant.API              ((:<|>) (..), (:>), Get, JSON, Post,
                                            ReqBody)
+import           Servant.API.Capture      (Capture)
 import           Servant.API.ContentTypes (Accept (..), MimeRender (..),
                                            MimeUnrender (..))
 import           Text.Printf              (printf)
 import           Text.Read                (Read)
 import           Text.Show                (Show)
-import Servant.API.Capture (Capture)
 
 type Routes =
        RouteShow
@@ -50,7 +50,7 @@ type RoutesApi = "api" :>
     )
   )
 
-type RouteGrantAuthPwd  = "login"  :> ReqBody '[JSON] Credentials :> Post '[JSON] RespLogin
+type RouteGrantAuthPwd  = "login"  :> ReqBody '[JSON] Credentials :> Post '[JSON] (Maybe CompactJWT)
 type RouteNewUser       = "new"    :> ReqBody '[JSON] Credentials :> Post '[JSON] (Maybe CompactJWT)
 type RouteDoesUserExist = "exists" :> ReqBody '[JSON] Text        :> Post '[JSON] Bool
 
