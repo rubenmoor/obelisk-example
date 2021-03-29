@@ -15,10 +15,10 @@ module Handlers
 
 import           AppData                   (DbAction, EnvApplication (..),
                                             Handler)
-import           Auth                      (UserInfo (..))
 import           Common                    (EpisodeNew (..), Routes,
                                             convertToFilename, formatDuration)
-import           Common.Auth               (CompactJWT, Credentials (..))
+import           Common.Auth               (CompactJWT, Credentials (..),
+                                            UserInfo (..))
 import           Control.Applicative       (Applicative (pure))
 import           Control.Category          (Category ((.)))
 import           Control.Exception.Lifted  (catch, evaluate)
@@ -27,6 +27,7 @@ import           Control.Monad.IO.Class    (MonadIO (liftIO))
 import           Control.Monad.Reader      (asks)
 import           Data.Bool                 (Bool (..))
 import qualified Data.ByteString.Lazy      as Lazy
+import qualified Data.ByteString.Lazy.UTF8 as BSU
 import           Data.Eq                   (Eq ((==)))
 import           Data.FileEmbed            (makeRelativeToProject)
 import           Data.Function             (($))
@@ -37,6 +38,8 @@ import           Data.Maybe                (Maybe (Just, Nothing), isJust,
                                             maybe)
 import           Data.Monoid               ((<>))
 import           Data.Ord                  (Down (Down))
+import           Data.Password             (Pass (..), PassCheck (..),
+                                            PassHash (..), checkPass, hashPass)
 import           Data.Text                 (Text, breakOn, drop, replace,
                                             toUpper)
 import qualified Data.Text                 as Text
@@ -55,17 +58,12 @@ import           Model                     (AuthPwd (..), EntityField (..),
                                             Podcast (..), Subject (..),
                                             Unique (..), User (..),
                                             Visibility (..))
-                                          -- EventSource (..), Journal (..),
-                                          -- Visibility (..))
-import qualified Data.ByteString.Lazy.UTF8 as BSU
-import           Data.Password             (PasswordCheck (..))
-import           Data.Password.Argon2      (PasswordHash (..), checkPassword,
-                                            hashPassword, mkPassword)
 import           Safe                      (headMay)
 import           Servant.API               ((:<|>) (..))
 import           Servant.Server            (HasServer (ServerT),
                                             ServantErr (errBody), err400,
                                             err404, err500, throwError)
+import           Snap.Core                 (Snap)
 import           Text.Blaze.Renderer.Utf8  (renderMarkup)
 import           Text.Heterocephalus       (compileHtmlFile)
 import           Text.Show                 (Show (show))
@@ -160,9 +158,9 @@ handleGrantAuthPwd Credentials{..} = do -- pure $ RespLoginFailure LoginFailureW
   user <- maybe (throwError $ err400 { errBody = "user does not exist" }) pure mUser
   mAuth <- runDb (getBy $ UAuthPwdFkUser $ entityKey user)
   Entity _ AuthPwd{..} <- maybe (throwError $ err400 { errBody = "not registered with password"}) pure mAuth
-  case checkPassword (mkPassword credPassword) (PasswordHash authPwdPassword) of
-    PasswordCheckSuccess -> pure Nothing
-    PasswordCheckFail    -> pure Nothing
+  case checkPass (Pass credPassword) (PassHash authPwdPassword) of
+    PassCheckSucc -> pure Nothing
+    PassCheckFail -> pure Nothing
 
 handleNewUser :: Credentials -> Handler (Maybe CompactJWT)
 handleNewUser Credentials{..} = do
@@ -171,7 +169,7 @@ handleNewUser Credentials{..} = do
   first <- runDb $ (null :: [Entity User] -> Bool) <$> getAll
   eventSourceId <- runDb $ insert EventSource
   user <- runDb $ insert $ User credName first eventSourceId
-  password <- unPasswordHash <$> hashPassword (mkPassword credPassword)
+  password <- unPassHash <$> hashPass (Pass credPassword)
   runDb $ insert_ $ AuthPwd user password
   now <- liftIO getCurrentTime
   let journalFkAlias = Nothing

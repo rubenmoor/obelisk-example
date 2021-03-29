@@ -31,11 +31,8 @@ library
     , obelisk-backend
     , obelisk-executable-config-lookup
     , obelisk-route
-    -- weird problem, where password cannot be found
-    -- unless I specify a version like so
-    , password >=2.1.0.0
+    , password
     , persistent
-    , persistent-template
     , persistent-mysql
     , resource-pool
     , resourcet
@@ -53,15 +50,7 @@ library
     , Auth
     , Config
     , Handlers
-    , Model
-    , Model.Custom
-  ghc-options:
-    -Wall
-    -Wredundant-constraints
-    -Wincomplete-uni-patterns
-    -Wincomplete-record-updates
-    -O
-    -fno-show-valid-hole-fits
+  ghc-options: -Wall -Wredundant-constraints -Wincomplete-uni-patterns -Wincomplete-record-updates -O -fno-show-valid-hole-fits
 
 executable backend
   main-is: main.hs

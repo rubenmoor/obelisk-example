@@ -38,8 +38,8 @@ postUserExists
 
 postEpisodeNew
   :: SupportsServantReflex t m
-  => Dynamic t (Either Text Text) -- compactJWT
-  -> Dynamic t (Either Text Text) -- podcast identifier
+  => Dynamic t (Either Text Text) -- podcast identifier
+  -> Dynamic t (Either Text CompactJWT) -- compactJWT
   -> Dynamic t (Either Text EpisodeNew)
   -> Event t ()
   -> m (Event t (ReqResult () ()))

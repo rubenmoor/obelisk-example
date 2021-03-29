@@ -22,16 +22,44 @@
   }
 }:
 with obelisk;
-project ./. ({ ... }: {
-  android.applicationId = "systems.obsidian.obelisk.examples.minimal";
-  android.displayName = "Obelisk Minimal Example";
-  ios.bundleIdentifier = "systems.obsidian.obelisk.examples.minimal";
-  ios.bundleName = "Obelisk Minimal Example";
-  overrides = self: super: {
-    gerippe = pkgs.haskell.lib.dontHaddock (self.callCabal2nix "gerippe" ../gerippe { });
-    hspec-snap = (import ./dep/hspec-snap) self super;
-    persistent = self.callHackage "persistent" "2.9.2" {};
-    servant-reflex = self.callCabal2nix "servant-reflex" ../servant-reflex {};
-    servant-snap = (import ./dep/servant-snap) self super;
-  };
-})
+let password-repo = pkgs.fetchFromGitHub {
+      owner = "cdepillabout";
+      repo = "password";
+      rev = "e90b7481af2d63de6b2d9ead3c03ddb798707d22";
+      sha256 = "1ggn2z3j7znhh1gf0hqhdzwrl127x8g54268izg8k16npg90wv6b";
+    };
+in
+  project ./. ({ ... }: {
+    android.applicationId = "systems.obsidian.obelisk.examples.minimal";
+    android.displayName = "Obelisk Minimal Example";
+    ios.bundleIdentifier = "systems.obsidian.obelisk.examples.minimal";
+    ios.bundleName = "Obelisk Minimal Example";
+    overrides = self: super: {
+      gerippe = pkgs.haskell.lib.dontHaddock (self.callCabal2nix "gerippe" ../gerippe { });
+      hspec-snap = self.callCabal2nix "hspec-snap" (pkgs.fetchFromGitHub {
+        owner = "dbp";
+        repo = "hspec-snap";
+        rev = "60216c2fe435f157de4e253df0d318ecc1dfdaab";
+        sha256 = "08i8462pp76p1kkrpa1968ky7y9jbxz4073qmx9l8r83wqwwjxkk";
+      }) {};
+      persistent = self.callHackage "persistent" "2.9.2" {};
+      servant-reflex = self.callCabal2nix "servant-reflex" (pkgs.fetchFromGitHub {
+        owner = "imalsogreg";
+        repo = "servant-reflex";
+        rev = "20e2621cc2eca5fe38f8a01c7a159b0b9be524ea";
+        sha256 = "0aqyk04yg39xj40aj86hr6gwbzvj6i2fxi8zznmfl5fay8l96b4g";
+      }) {};
+      servant-snap = self.callCabal2nix "servant-snap" (pkgs.fetchFromGitHub {
+        owner = "haskell-servant";
+        repo = "servant-snap";
+        rev = "b54c5da86f2f2ed994e9dfbb0694c72301b5a220";
+        sha256 = "0j0a3lznxnf8f98fibla7d0bksz3kk4z9q02afmls5f9yylpf2ad";
+      }) {};
+      password = self.callCabal2nix "password" (password-repo + /password) {};
+      password-types = self.callCabal2nix "password-types"
+        (password-repo + /password-types) {};
+      base64 = self.callHackage "base64" "0.3.1.1" {};
+      password-instances = self.callCabal2nix "password-instances"
+        (password-repo + /password-instances) {};
+    };
+  })

@@ -1,4 +1,3 @@
-{-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -7,7 +6,7 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE TypeOperators         #-}
+
 module Auth where
 
 import           Common.Auth             (CompactJWT (CompactJWT))
@@ -15,7 +14,7 @@ import           Control.Applicative     (Applicative (pure))
 import           Control.Lens            ((?~), (^.))
 import           Control.Monad.Except    (ExceptT, throwError)
 import           Control.Monad.IO.Class  (MonadIO (liftIO))
-import           Crypto.JWT              (Audience (..), ClaimsSet, JWK,
+import           Crypto.JWT              (StringOrURI, Audience (..), ClaimsSet, JWK,
                                           JWTError (..), NumericDate (..),
                                           bestJWSAlg, claimAud, claimExp,
                                           claimIat, claimSub, decodeCompact,
@@ -41,11 +40,13 @@ import           Servant                 ((:>), AuthProtect)
 import           Servant.Server          (HasContextEntry (getContextEntry),
                                           HasServer (..))
 import           Servant.Server.Internal (DelayedM, addAuthCheck, withRequest)
-import           Snap.Core               (Snap)
+import           Snap.Core               (Request, Snap)
 import           Snap.Internal.Core      (evalSnap)
 import           System.IO               (IO)
 import           Text.Show               (Show (show))
+import AppData (Handler)
 
+audience :: StringOrURI
 audience = "https://www.serendipity.works"
 
 mkClaims :: UTCTime -> Text -> ClaimsSet
@@ -72,34 +73,3 @@ verifyCompactJWT jwk (CompactJWT str)  = do
     Just sub -> pure $ Text.pack $ show sub
 
 -- servant general auth
-
-data UserInfo = UserInfo
-  { uiIsSiteAdmin :: Bool
-  , uiUserName    :: Text
-  , uiAliasName   :: Text
-  , uiClearances  :: Map Text Rank
-  }
-
--- type instance AuthServerData (AuthProtect "jwt") = UserInfo
-
-instance ( HasServer api context m
-         , HasContextEntry context (Snap UserInfo)
-         )
-  => HasServer (AuthProtect tag :> api) context m where
-
-  type ServerT (AuthProtect tag :> api) context m =
-    UserInfo -> ServerT api context m
-
-  hoistServerWithContext _ pc nt s = hoistServerWithContext (Proxy :: Proxy api) pc nt . s
-
-  route Proxy context subserver =
-    route (Proxy :: Proxy api) context (subserver `addAuthCheck` withRequest authCheck )
-      where
-        authHandler :: Snap UserInfo
-        authHandler = getContextEntry context
-        authCheck :: DelayedM m UserInfo
-        authCheck =
-          liftIO $ evalSnap authHandler
-                            (\x -> pure $! (x `seq` ()))
-                            (\f -> let !_ = f 0 in pure ())
-                            req

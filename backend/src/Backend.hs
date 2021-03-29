@@ -15,7 +15,6 @@ import           Route                           (BackendRoute (BackendRoute_Api
                                                   fullRouteEncoder)
 
 import           AppData                         (EnvApplication (..))
-import           Auth                            (UserInfo)
 import           Common                          (routes)
 import           Config                          (Params (..))
 import           Control.Applicative             (Applicative (pure))
@@ -51,10 +50,14 @@ import           Snap.Core                       (Snap)
 import           System.Exit                     (ExitCode (ExitFailure),
                                                   exitWith)
 import           System.IO                       (IO)
+import Data.Pool (Pool)
+import Database.Gerippe (SqlBackend)
+import Common.Auth (UserInfo)
 
 backendApp :: Context '[Snap UserInfo] -> EnvApplication -> Snap ()
 backendApp ctx = runReaderT $ serveSnapWithContext routes ctx handlers
 
+mkContext :: JWK -> Pool SqlBackend -> Context '[Snap UserInfo]
 mkContext jwk pool =
   let authHandler :: Snap UserInfo
       authHandler = undefined

@@ -1,6 +1,6 @@
 name: common
 version: 0.1
-cabal-version: >= 1.2
+cabal-version: >= 1.8
 build-type: Simple
 
 library
@@ -10,14 +10,25 @@ library
     , aeson
     , bytestring
     , containers
+    , gerippe
     , http-api-data
     , http-media
     , obelisk-route
     , mtl
+    , password
+    , password-instances
+    , persistent-template
+    , reflex-dom
     , servant
+    , servant-reflex
+    , servant-snap
+    , snap-core
     , text
+    , time
   exposed-modules:
       Common
     , Common.Auth
+    , Model
+    , Model.Custom
     , Route
   ghc-options: -Wall -Wredundant-constraints -Wincomplete-uni-patterns -Wincomplete-record-updates -O -fno-show-valid-hole-fits

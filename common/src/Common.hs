@@ -8,7 +8,7 @@
 
 module Common where
 
-import           Common.Auth              (CompactJWT, Credentials)
+import           Common.Auth              (AuthProtect, CompactJWT, Credentials)
 import           Control.Applicative      (Applicative (pure))
 import           Control.Category         (Category (id))
 import           Data.Aeson               (FromJSON, ToJSON)
@@ -25,7 +25,7 @@ import           GHC.Generics             (Generic)
 import           GHC.Num                  (Num ((*)))
 import           GHC.Real                 (Integral (div, mod))
 import           Network.HTTP.Media       ((//), (/:))
-import           Servant.API              (AuthProtect, (:<|>) (..), (:>), Get, JSON, Post,
+import           Servant.API              ((:<|>) (..), (:>), Get, JSON, Post,
                                            ReqBody)
 import           Servant.API.Capture      (Capture)
 import           Servant.API.ContentTypes (Accept (..), MimeRender (..),

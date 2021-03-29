@@ -20,7 +20,6 @@ module Model
   , EntityField (..)
   ) where
 
-import           Data.ByteString     (ByteString)
 import           Data.Text           (Text)
 import           Data.Time           (Day, UTCTime)
 import           Database.Persist.TH (mkMigrate, mkPersist, persistLowerCase,
@@ -29,6 +28,8 @@ import           Database.Persist.TH (mkMigrate, mkPersist, persistLowerCase,
 import           Database.Gerippe    (PersistEntity (EntityField, Unique))
 import           Model.Custom        (Event (..), Rank (..), Subject (..),
                                       Visibility (..))
+import Data.Password.Argon2 (PasswordHash, Argon2)
+import Data.Password.Instances ()
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Podcast
@@ -80,7 +81,7 @@ Clearance
   rank             Rank
 AuthPwd
   fkUser           UserId
-  password         Text
+  password         (PasswordHash Argon2)
   UAuthPwdFkUser fkUser
 Journal
   fkEventSource    EventSourceId

@@ -109,8 +109,8 @@ body = do
     -- res <- postEpisodeNew (constDyn $ Left "no jwt") eitherEpisodeNew sendButton
     elAttr "p" ("style" =: "color:red") $ prerender_ (text "loading") $ do
       -- TODO: make client aware of currently selected show
-      res <- lift $ postEpisodeNew (constDyn $ Right "jwt tbd")
-                                   (constDyn $ Right "fullserendipity")
+      res <- lift $ postEpisodeNew (constDyn $ Right "fullserendipity")
+                                   (constDyn $ Left "no jwt")
                                    eitherEpisodeNew
                                    sendButton
       let err = mapMaybe reqFailure res
