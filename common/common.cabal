@@ -9,6 +9,8 @@ library
       base
     , aeson
     , bytestring
+    , containers
+    , http-api-data
     , http-media
     , obelisk-route
     , mtl

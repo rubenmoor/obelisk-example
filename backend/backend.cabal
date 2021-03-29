@@ -14,6 +14,7 @@ library
     , blaze-markup
     , bytestring
     , common
+    , containers
     , data-default
     , directory
     , jose

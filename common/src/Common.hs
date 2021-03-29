@@ -25,7 +25,7 @@ import           GHC.Generics             (Generic)
 import           GHC.Num                  (Num ((*)))
 import           GHC.Real                 (Integral (div, mod))
 import           Network.HTTP.Media       ((//), (/:))
-import           Servant.API              ((:<|>) (..), (:>), Get, JSON, Post,
+import           Servant.API              (AuthProtect, (:<|>) (..), (:>), Get, JSON, Post,
                                            ReqBody)
 import           Servant.API.Capture      (Capture)
 import           Servant.API.ContentTypes (Accept (..), MimeRender (..),
@@ -46,7 +46,7 @@ type RouteShow = "show" :> Capture "podcast_id" Text :>
 type RoutesApi = "api" :>
   (     "auth" :> (RouteGrantAuthPwd :<|> RouteNewUser :<|> RouteDoesUserExist)
    :<|> "epsiode" :> Capture "podcast_id" Text :>
-    ( RouteEpisodeNew
+    ( AuthProtect "jwt" :> RouteEpisodeNew
     )
   )
 

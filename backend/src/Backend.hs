@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE NoImplicitPrelude   #-}
@@ -9,28 +10,27 @@
 
 module Backend where
 
-import           Route                           (BackendRoute(BackendRoute_Show, BackendRoute_Missing, BackendRoute_Api),
+import           Route                           (BackendRoute (BackendRoute_Api, BackendRoute_Missing, BackendRoute_Show),
                                                   FrontendRoute,
                                                   fullRouteEncoder)
 
 import           AppData                         (EnvApplication (..))
+import           Auth                            (UserInfo)
 import           Common                          (routes)
+import           Config                          (Params (..))
 import           Control.Applicative             (Applicative (pure))
-import           Control.Monad                   (Monad ((>>=)))
+import           Control.Monad.Logger            (NoLoggingT (..))
 import           Control.Monad.Reader            (ReaderT (runReaderT))
 import           Control.Monad.Trans             (MonadIO (liftIO))
-import           Crypto.JOSE                     (JWKSet (JWKSet))
-import           Crypto.JWT                      (Crv (P_384), JWK, KeyMaterialGenParam (ECGenParam),
-                                                  defaultJWTValidationSettings,
-                                                  genJWK)
+import           Control.Monad.Trans.Resource    (runResourceT)
+import           Crypto.JWT                      (JWK)
+import           Data.Aeson                      (FromJSON)
 import qualified Data.Aeson                      as Aeson
-import qualified Data.Aeson.Encode.Pretty        as Aeson (encodePretty)
-import           Data.Bool                       (Bool (True))
-import qualified Data.ByteString.Char8           as Char8
-import qualified Data.ByteString.Lazy            as Lazy
-import           Data.Function                   (const, ($))
+import           Data.Function                   (($))
 import           Data.Maybe                      (maybe)
 import           Data.Monoid                     ((<>))
+import           Data.Text                       (Text)
+import           Data.Text.IO                    (putStrLn)
 import           Database.MySQL.Base.Types       (Option (CharsetName))
 import           Database.Persist.MySQL          (ConnectInfo (..),
                                                   defaultConnectInfo,
@@ -38,31 +38,27 @@ import           Database.Persist.MySQL          (ConnectInfo (..),
                                                   withMySQLPool)
 import           GHC.Base                        (undefined)
 import           Handlers                        (handlers)
-import           Obelisk.Backend                 (Backend (..))
-import           Obelisk.ExecutableConfig.Lookup (getConfigs)
-import           Obelisk.Route                   (pattern (:/))
--- use obelisk's static mechanism instead
--- import           Paths_backend             (getDataFileName)
-import           Config                          (Params (..))
-import           Control.Monad.Logger            (NoLoggingT (..))
-import           Control.Monad.Trans.Resource    (runResourceT)
-import           Data.Aeson                      (FromJSON)
-import           Data.Text                       (Text)
-import           Data.Text.IO                    (putStrLn)
 import           Model                           (migrateAll)
+import           Obelisk.Backend                 (Backend (..))
 import           Obelisk.Configs                 (ConfigsT,
                                                   HasConfigs (getConfig),
                                                   runConfigsT)
-import           Servant                         ((:<|>) (..), serveDirectory)
-import           Servant.Server                  (serveSnap)
+import           Obelisk.ExecutableConfig.Lookup (getConfigs)
+import           Obelisk.Route                   (pattern (:/))
+import           Servant.Server                  (Context ((:.), EmptyContext),
+                                                  serveSnapWithContext)
 import           Snap.Core                       (Snap)
-import           System.Directory                (doesFileExist)
 import           System.Exit                     (ExitCode (ExitFailure),
                                                   exitWith)
 import           System.IO                       (IO)
 
-backendApp :: EnvApplication -> Snap ()
-backendApp = runReaderT $ serveSnap routes handlers
+backendApp :: Context '[Snap UserInfo] -> EnvApplication -> Snap ()
+backendApp ctx = runReaderT $ serveSnapWithContext routes ctx handlers
+
+mkContext jwk pool =
+  let authHandler :: Snap UserInfo
+      authHandler = undefined
+  in  authHandler :. EmptyContext
 
 backend :: Backend BackendRoute FrontendRoute
 backend = Backend
@@ -83,16 +79,18 @@ backend = Backend
         --                      (defaultJWTValidationSettings $ const True)
         -- ctx = ctxJWT :. EmptyContext
     runNoLoggingT $ withMySQLPool connectInfo 10 $ \pool -> do
+      -- TODO: why runResourceT and not liftIO?
       runResourceT $ runSqlPool (runMigration migrateAll) pool
       let env = EnvApplication
             { envPool      = pool
             , envMediaDir  = paramMediaDir
             , envUrl       = paramUrl
             }
+          ctx = mkContext jwk pool
       NoLoggingT $ serve $ \case
         (BackendRoute_Missing :/ ()) -> pure ()
-        (BackendRoute_Api     :/  _) -> backendApp env
-        (BackendRoute_Show    :/  _) -> backendApp env
+        (BackendRoute_Api     :/  _) -> backendApp ctx env
+        (BackendRoute_Show    :/  _) -> backendApp ctx env
   , _backend_routeEncoder = fullRouteEncoder
   }
 

@@ -15,6 +15,7 @@ module Handlers
 
 import           AppData                   (DbAction, EnvApplication (..),
                                             Handler)
+import           Auth                      (UserInfo (..))
 import           Common                    (EpisodeNew (..), Routes,
                                             convertToFilename, formatDuration)
 import           Common.Auth               (CompactJWT, Credentials (..))
@@ -45,7 +46,8 @@ import           Data.Tuple                (snd)
 import           Database.Gerippe          (Entity (..),
                                             PersistStoreWrite (insert, insert_),
                                             PersistUniqueRead (getBy),
-                                            PersistentSqlException, getAll, getWhere)
+                                            PersistentSqlException, getAll,
+                                            getWhere)
 import           Database.Persist.MySQL    (runSqlPool)
 import           Model                     (AuthPwd (..), EntityField (..),
                                             Episode (..), Event (..),
@@ -56,8 +58,8 @@ import           Model                     (AuthPwd (..), EntityField (..),
                                           -- EventSource (..), Journal (..),
                                           -- Visibility (..))
 import qualified Data.ByteString.Lazy.UTF8 as BSU
-import           Data.Password             (PasswordHash, PasswordCheck (..))
-import           Data.Password.Argon2      (checkPassword, PasswordHash (..),
+import           Data.Password             (PasswordCheck (..))
+import           Data.Password.Argon2      (PasswordHash (..), checkPassword,
                                             hashPassword, mkPassword)
 import           Safe                      (headMay)
 import           Servant.API               ((:<|>) (..))
@@ -70,7 +72,7 @@ import           Text.Show                 (Show (show))
 
 default(Text)
 
-handlers :: ServerT Routes '[] Handler
+handlers :: ServerT Routes '[Snap UserInfo] Handler
 handlers =
     handleFeedXML
   :<|>  (handleGrantAuthPwd
@@ -187,11 +189,12 @@ handleNewUser Credentials{..} = do
 handleDoesUserExist :: Text -> Handler Bool
 handleDoesUserExist str = runDb $ isJust <$> getBy (UUserName str)
 
-handleEpisodeNew :: Text -> EpisodeNew -> Handler ()
-handleEpisodeNew theShow EpisodeNew{..} = do
+handleEpisodeNew :: Text -> UserInfo -> EpisodeNew -> Handler ()
+handleEpisodeNew theShow UserInfo{..} EpisodeNew{..} = do
   mShow <- runDb $ getBy $ UPodcastIdentifier theShow
   episodeFkPodcast <- maybe (throwError $ err500 { errBody = "show not found" })
                             (pure . entityKey) mShow
+  -- TODO: verify clearance
   now <- liftIO getCurrentTime
   when (newTitle == "") $
     throwError $ err400 { errBody = "title field is mandatory" }

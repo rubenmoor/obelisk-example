@@ -1,4 +1,5 @@
 { system ? builtins.currentSystem
+, pkgs ? import <nixpkgs> {}
 , obelisk ? import ./.obelisk/impl {
   reflex-platform-func = args@{ ... }: import ../reflex-platform (args // {
       inherit system;
@@ -27,10 +28,10 @@ project ./. ({ ... }: {
   ios.bundleIdentifier = "systems.obsidian.obelisk.examples.minimal";
   ios.bundleName = "Obelisk Minimal Example";
   overrides = self: super: {
-    gerippe = self.callPackage ../gerippe {};
+    gerippe = pkgs.haskell.lib.dontHaddock (self.callCabal2nix "gerippe" ../gerippe { });
     hspec-snap = (import ./dep/hspec-snap) self super;
     persistent = self.callHackage "persistent" "2.9.2" {};
-    servant-reflex = self.callPackage ../servant-reflex {};
+    servant-reflex = self.callCabal2nix "servant-reflex" ../servant-reflex {};
     servant-snap = (import ./dep/servant-snap) self super;
   };
 })

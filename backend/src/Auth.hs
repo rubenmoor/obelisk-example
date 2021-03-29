@@ -1,33 +1,50 @@
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE NoImplicitPrelude   #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NoImplicitPrelude     #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
 module Auth where
 
-import           Common.Auth          (CompactJWT (CompactJWT))
-import           Control.Applicative  (Applicative (pure))
-import           Control.Lens         ((?~), (^.))
-import           Control.Monad.Except (ExceptT, throwError)
-import           Control.Monad.Trans  (MonadIO)
-import           Crypto.JWT           (Audience (..), ClaimsSet, JWK,
-                                       JWTError (..), MonadRandom,
-                                       NumericDate (..), bestJWSAlg, claimAud,
-                                       claimExp, claimIat, claimIss, claimSub,
-                                       decodeCompact,
-                                       defaultJWTValidationSettings,
-                                       emptyClaimsSet, encodeCompact,
-                                       newJWSHeader, signClaims, verifyClaims)
-import qualified Data.ByteString.Lazy as BL
-import           Data.Eq              (Eq ((==)))
-import           Data.Function        (($), (&), (.))
-import           Data.Maybe           (Maybe (..), maybe)
-import           Data.String          (fromString)
-import           Data.Text            (Text)
-import qualified Data.Text            as Text
-import qualified Data.Text.Encoding   as Text
-import           Data.Time            (UTCTime, addUTCTime)
-import           System.IO            (IO)
-import           Text.Show            (Show (show))
+import           Common.Auth             (CompactJWT (CompactJWT))
+import           Control.Applicative     (Applicative (pure))
+import           Control.Lens            ((?~), (^.))
+import           Control.Monad.Except    (ExceptT, throwError)
+import           Control.Monad.IO.Class  (MonadIO (liftIO))
+import           Crypto.JWT              (Audience (..), ClaimsSet, JWK,
+                                          JWTError (..), NumericDate (..),
+                                          bestJWSAlg, claimAud, claimExp,
+                                          claimIat, claimSub, decodeCompact,
+                                          defaultJWTValidationSettings,
+                                          emptyClaimsSet, encodeCompact,
+                                          newJWSHeader, signClaims,
+                                          verifyClaims)
+import           Data.Bool               (Bool)
+import qualified Data.ByteString.Lazy    as BL
+import           Data.Data               (Proxy (Proxy))
+import           Data.Eq                 (Eq ((==)))
+import           Data.Function           (($), (&), (.))
+import           Data.Map                (Map)
+import           Data.Maybe              (Maybe (..))
+import           Data.String             (fromString)
+import           Data.Text               (Text)
+import qualified Data.Text               as Text
+import qualified Data.Text.Encoding      as Text
+import           Data.Time               (UTCTime, addUTCTime)
+import           GHC.Base                (seq, ($!))
+import           Model                   (Rank)
+import           Servant                 ((:>), AuthProtect)
+import           Servant.Server          (HasContextEntry (getContextEntry),
+                                          HasServer (..))
+import           Servant.Server.Internal (DelayedM, addAuthCheck, withRequest)
+import           Snap.Core               (Snap)
+import           Snap.Internal.Core      (evalSnap)
+import           System.IO               (IO)
+import           Text.Show               (Show (show))
 
 audience = "https://www.serendipity.works"
 
@@ -53,3 +70,36 @@ verifyCompactJWT jwk (CompactJWT str)  = do
   case claims ^. claimSub of
     Nothing  -> throwError $ JWTClaimsSetDecodeError "no subject in claims"
     Just sub -> pure $ Text.pack $ show sub
+
+-- servant general auth
+
+data UserInfo = UserInfo
+  { uiIsSiteAdmin :: Bool
+  , uiUserName    :: Text
+  , uiAliasName   :: Text
+  , uiClearances  :: Map Text Rank
+  }
+
+-- type instance AuthServerData (AuthProtect "jwt") = UserInfo
+
+instance ( HasServer api context m
+         , HasContextEntry context (Snap UserInfo)
+         )
+  => HasServer (AuthProtect tag :> api) context m where
+
+  type ServerT (AuthProtect tag :> api) context m =
+    UserInfo -> ServerT api context m
+
+  hoistServerWithContext _ pc nt s = hoistServerWithContext (Proxy :: Proxy api) pc nt . s
+
+  route Proxy context subserver =
+    route (Proxy :: Proxy api) context (subserver `addAuthCheck` withRequest authCheck )
+      where
+        authHandler :: Snap UserInfo
+        authHandler = getContextEntry context
+        authCheck :: DelayedM m UserInfo
+        authCheck =
+          liftIO $ evalSnap authHandler
+                            (\x -> pure $! (x `seq` ()))
+                            (\f -> let !_ = f 0 in pure ())
+                            req

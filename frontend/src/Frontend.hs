@@ -24,7 +24,7 @@ import           Client                    (postEpisodeNew)
 import           Common                    (EpisodeNew (..), convertToFilename)
 import           Control.Applicative       (Applicative (pure, (<*>)))
 import           Control.Category          (Category ((.)))
-import           Control.Monad             (Monad ((>>=)), (=<<))
+import           Control.Monad             (Monad ((>>=)))
 import           Control.Monad.IO.Class    (MonadIO (liftIO))
 import           Control.Monad.Trans.Class (MonadTrans (lift))
 import           Data.Default              (Default (def))
@@ -34,19 +34,15 @@ import           Data.Functor              (($>), Functor (fmap), (<$>))
 import           Data.Maybe                (Maybe (..), fromMaybe, maybe)
 import           Data.Monoid               ((<>))
 import           Data.Text                 (Text, toUpper)
-import           Data.Time                 (UTCTime (..), defaultTimeLocale,
+import           Data.Time                 (defaultTimeLocale,
                                             formatTime, getCurrentTime)
 import           Data.Tuple                (fst, snd)
 import           Data.Witherable           (mapMaybe)
-import           GHC.Base                  (undefined)
-import           Reflex.Dom                (TriggerEvent, PerformEvent(performEvent), PostBuild(getPostBuild), DomBuilder (inputElement),
-                                            MonadHold (holdDyn),
-                                            Prerender (prerender),
-                                            Reflex(Event, never), constDyn, dynText,
+import           Reflex.Dom                (PerformEvent(performEvent), PostBuild(getPostBuild), DomBuilder (inputElement),
+                                            MonadHold (holdDyn), constDyn, dynText,
                                             elDynAttr,
                                             elementConfig_initialAttributes,
                                             inputElementConfig_elementConfig,
-                                            inputElementConfig_initialValue,
                                             prerender_, (.~))
 import           Route                     (FrontendRoute)
 import           Servant.Common.Req        (reqFailure)
@@ -113,7 +109,10 @@ body = do
     -- res <- postEpisodeNew (constDyn $ Left "no jwt") eitherEpisodeNew sendButton
     elAttr "p" ("style" =: "color:red") $ prerender_ (text "loading") $ do
       -- TODO: make client aware of currently selected show
-      res <- lift $ postEpisodeNew (constDyn $ Right "fullserendipity") eitherEpisodeNew sendButton
+      res <- lift $ postEpisodeNew (constDyn $ Right "jwt tbd")
+                                   (constDyn $ Right "fullserendipity")
+                                   eitherEpisodeNew
+                                   sendButton
       let err = mapMaybe reqFailure res
       holdDyn "" err >>= dynText
 
