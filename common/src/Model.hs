@@ -20,16 +20,16 @@ module Model
   , EntityField (..)
   ) where
 
-import           Data.Text           (Text)
-import           Data.Time           (Day, UTCTime)
-import           Database.Persist.TH (mkMigrate, mkPersist, persistLowerCase,
-                                      share, sqlSettings)
+import           Data.Text               (Text)
+import           Data.Time               (Day, UTCTime)
+import           Database.Persist.TH     (mkMigrate, mkPersist,
+                                          persistLowerCase, share, sqlSettings)
 
-import           Database.Gerippe    (PersistEntity (EntityField, Unique))
-import           Model.Custom        (Event (..), Rank (..), Subject (..),
-                                      Visibility (..))
-import Data.Password.Argon2 (PasswordHash, Argon2)
-import Data.Password.Instances ()
+import           Data.Password.Argon2    (Argon2, PasswordHash)
+import           Data.Password.Instances ()
+import           Database.Gerippe        (PersistEntity (EntityField, Unique))
+import           Model.Custom            (Event (..), Rank (..), Subject (..),
+                                          Visibility (..))
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Podcast

@@ -15,7 +15,8 @@
 
 module Common.Auth
   ( CompactJWT (..)
-  , Credentials (..)
+  , LoginData (..)
+  , UserNew (..)
   , AuthProtect
   , UserInfo (..)
   ) where
@@ -42,7 +43,8 @@ import           Snap.Core               (Request, Snap)
 import           Snap.Internal.Core      (evalSnap)
 import           Web.HttpApiData         (FromHttpApiData (..),
                                           ToHttpApiData (..))
-import Model (Rank)
+import Model (Alias, Rank)
+import Database.Gerippe (PersistEntity(Key))
 
 newtype CompactJWT = CompactJWT
   { unCompactJWT :: Text
@@ -58,13 +60,22 @@ instance (ToHttpApiData CompactJWT) where
     toQueryParam (CompactJWT t) = t
     toHeader (CompactJWT t) = "Bearer " <> Text.encodeUtf8 t
 
-data Credentials = Credentials
-  { credName     :: Text
-  , credPassword :: Text
+data LoginData = LoginData
+  { ldUserName :: Text
+  , ldPassword :: Text
+  , ldAliasName :: Text
   } deriving (Eq, Show, Generic)
 
-instance FromJSON Credentials
-instance ToJSON Credentials
+instance FromJSON LoginData
+instance ToJSON LoginData
+
+data UserNew = UserNew
+  { unUserName     :: Text
+  , unPassword :: Text
+  } deriving (Eq, Show, Generic)
+
+instance FromJSON UserNew
+instance ToJSON UserNew
 
 data AuthProtect (tag :: k) deriving (Typeable)
 
@@ -82,7 +93,8 @@ instance (HasClient t m api tag, Reflex t)
 data UserInfo = UserInfo
   { uiIsSiteAdmin :: Bool
   , uiUserName    :: Text
-  , uiAliasName   :: Text
+  , uiAlias       :: Alias
+  , uiKeyAlias    :: Key Alias
   , uiClearances  :: Map Text Rank
   }
 

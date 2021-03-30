@@ -25,6 +25,7 @@ library
     , lens
     , lifted-base
     , monad-logger
+    , monad-time
     , mtl
     , mysql
     , network

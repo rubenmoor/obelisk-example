@@ -11,64 +11,110 @@
 
 module Handlers
   ( handlers
+  , mkContext
   ) where
 
 import           AppData                   (DbAction, EnvApplication (..),
                                             Handler)
+import           Auth                      (mkClaims, mkCompactJWT, mkSub,
+                                            runSub, verifyCompactJWT)
 import           Common                    (EpisodeNew (..), Routes,
                                             convertToFilename, formatDuration)
-import           Common.Auth               (CompactJWT, Credentials (..),
-                                            UserInfo (..))
+import           Common.Auth               (CompactJWT, LoginData (..),
+                                            UserInfo (..), UserNew (..))
 import           Control.Applicative       (Applicative (pure))
 import           Control.Category          (Category ((.)))
 import           Control.Exception.Lifted  (catch, evaluate)
-import           Control.Monad             (Monad ((>>=)), when)
+import           Control.Monad             (unless, Monad ((>>=)), when)
+import           Control.Monad.Except      (runExceptT)
 import           Control.Monad.IO.Class    (MonadIO (liftIO))
 import           Control.Monad.Reader      (asks)
+import           Control.Monad.Trans       (MonadTrans (lift))
+import           Crypto.JWT                (JWK)
 import           Data.Bool                 (Bool (..))
 import qualified Data.ByteString.Lazy      as Lazy
 import qualified Data.ByteString.Lazy.UTF8 as BSU
+import           Data.Either               (either)
 import           Data.Eq                   (Eq ((==)))
 import           Data.FileEmbed            (makeRelativeToProject)
-import           Data.Function             (($))
-import           Data.Functor              ((<$>))
+import           Data.Function             (flip, ($))
+import           Data.Functor
 import           Data.Int                  (Int)
 import           Data.List                 (map, null, sortOn)
+import qualified Data.Map                  as Map
 import           Data.Maybe                (Maybe (Just, Nothing), isJust,
                                             maybe)
 import           Data.Monoid               ((<>))
-import           Data.Ord                  (Down (Down))
-import           Data.Password             (Pass (..), PassCheck (..),
-                                            PassHash (..), checkPass, hashPass)
+import           Data.Ord                  (Ord((<)), Down (Down))
+import           Data.Password             (mkPassword)
+import           Data.Password.Argon2      (PasswordCheck (..), checkPassword,
+                                            hashPassword)
+import           Data.Pool                 (Pool)
+import           Data.String               (String)
 import           Data.Text                 (Text, breakOn, drop, replace,
                                             toUpper)
 import qualified Data.Text                 as Text
 import           Data.Time                 (defaultTimeLocale, formatTime,
                                             getCurrentTime, parseTimeM)
 import           Data.Tuple                (snd)
-import           Database.Gerippe          (Entity (..),
+import           Database.Gerippe          (join1ToMWhere', join1ToM', Entity (..), InnerJoin (..),
                                             PersistStoreWrite (insert, insert_),
                                             PersistUniqueRead (getBy),
-                                            PersistentSqlException, getAll,
-                                            getWhere)
-import           Database.Persist.MySQL    (runSqlPool)
-import           Model                     (AuthPwd (..), EntityField (..),
+                                            PersistentSqlException, from,
+                                            getAll, getWhere, joinMTo1Where',
+                                            on, select, val, where_, (&&.),
+                                            (==.), (^.))
+import           Database.Persist.MySQL    ((=.), PersistStoreWrite(update), SqlBackend, runSqlPool)
+import           Model                     (Rank(RankModerator), Alias (..), AuthPwd (..),
+                                            Clearance (..), EntityField (..),
                                             Episode (..), Event (..),
                                             EventSource (..), Journal (..),
                                             Podcast (..), Subject (..),
                                             Unique (..), User (..),
                                             Visibility (..))
 import           Safe                      (headMay)
-import           Servant.API               ((:<|>) (..))
-import           Servant.Server            (HasServer (ServerT),
+import           Servant.API               ((:<|>) (..),
+                                            FromHttpApiData (parseHeader))
+import           Servant.Server            (err403, Context ((:.), EmptyContext),
+                                            HasServer (ServerT),
                                             ServantErr (errBody), err400,
                                             err404, err500, throwError)
-import           Snap.Core                 (Snap)
+import           Snap.Core                 (Snap, getHeader, getRequest)
 import           Text.Blaze.Renderer.Utf8  (renderMarkup)
 import           Text.Heterocephalus       (compileHtmlFile)
 import           Text.Show                 (Show (show))
 
 default(Text)
+
+mkContext :: JWK -> Pool SqlBackend -> Context '[Snap UserInfo]
+mkContext jwk pool =
+  let authHandler :: Snap UserInfo
+      authHandler = do
+        let toServerError e = throwError $ err500 { errBody = BSU.fromString $ show e}
+            for = flip fmap
+        mStr <- getHeader "Authorization" <$> getRequest
+        str <- maybe (toServerError ("authorization header missing" :: String))
+               pure mStr
+        jwt <- either toServerError pure $ parseHeader str
+        eSub <- liftIO $ runExceptT $ verifyCompactJWT jwk jwt
+        (uiUserName, uiAliasName) <- runSub <$> either toServerError pure eSub
+        ls <- runDb' pool $ select . from $ \(a `InnerJoin` u) -> do
+          on     $ a ^. AliasFkUser ==. u ^. UserId
+          where_ $ u ^. UserName ==. val uiUserName
+               &&. a ^. AliasName ==. val uiAliasName
+          pure (u, a)
+        (Entity _ User{..}, Entity uiKeyAlias uiAlias) <- case ls of
+          [entry] -> pure entry
+          _       -> toServerError ("user/alias not found" :: String)
+        let uiIsSiteAdmin = userIsSiteAmdin
+        clearances <- runDb' pool $
+          joinMTo1Where' ClearanceFkPodcast PodcastId
+                         ClearanceFkAlias uiKeyAlias
+        let uiClearances = Map.fromList $
+              for clearances $ \(Entity _ Clearance{..}, Entity _ Podcast{..}) ->
+                (podcastIdentifier, clearanceRank)
+        pure $ UserInfo{..}
+  in  authHandler :. EmptyContext
 
 handlers :: ServerT Routes '[Snap UserInfo] Handler
 handlers =
@@ -78,10 +124,15 @@ handlers =
     :<|> handleDoesUserExist
         )
   :<|> handleEpisodeNew
+  :<|> handleAliasRename
 
 runDb :: DbAction a -> Handler a
 runDb action = do
   pool <- asks envPool
+  lift $ runDb' pool action
+
+runDb' :: Pool SqlBackend -> DbAction a -> Snap a
+runDb' pool action =
   catch (liftIO $ runSqlPool action pool >>= evaluate) $
     \(e :: PersistentSqlException) ->
       throwError $ err500 { errBody = BSU.fromString $ show e }
@@ -152,47 +203,90 @@ data EpisodeFeedData = EpisodeFeedData
     }
 
 
-handleGrantAuthPwd :: Credentials -> Handler (Maybe CompactJWT)
-handleGrantAuthPwd Credentials{..} = do -- pure $ RespLoginFailure LoginFailureWrongPassword
-  mUser <- runDb (getBy $ UUserName credName)
-  user <- maybe (throwError $ err400 { errBody = "user does not exist" }) pure mUser
-  mAuth <- runDb (getBy $ UAuthPwdFkUser $ entityKey user)
-  Entity _ AuthPwd{..} <- maybe (throwError $ err400 { errBody = "not registered with password"}) pure mAuth
-  case checkPass (Pass credPassword) (PassHash authPwdPassword) of
-    PassCheckSucc -> pure Nothing
-    PassCheckFail -> pure Nothing
+handleGrantAuthPwd :: LoginData -> Handler (Maybe CompactJWT)
+handleGrantAuthPwd LoginData{..} = do
+  mUser <- runDb (getBy $ UUserName ldUserName)
+  Entity keyUser user <- maybe
+    (throwError $ err400 { errBody = "user does not exist" })
+    pure mUser
+  mAuth <- runDb (getBy $ UAuthPwdFkUser keyUser)
+  Entity _ AuthPwd{..} <- maybe
+    (throwError $ err400 { errBody = "not registered with password"})
+    pure mAuth
+  mAlias <- runDb $ getBy $ UAliasName ldAliasName
+  keyAlias <- case mAlias of
+    Just (Entity key Alias{..}) -> do
+      unless (aliasFkUser == keyUser) $ throwError $ err400 { errBody = "wrong alias" }
+      pure key
+    Nothing -> throwError $ err400 { errBody = "alias does not exist" }
+  case checkPassword (mkPassword ldPassword) authPwdPassword of
+    PasswordCheckSuccess -> do
+      now <- liftIO getCurrentTime
+      runDb $ insert_ $
+        let journalFkAlias = Just keyAlias
+            journalCreated = now
+            journalEvent = EventLogin
+            journalDescription = ""
+            journalSubject = SubjectUser
+            journalFkEventSource = userFkEventSource user
+        in  Journal{..}
+      let claims = mkClaims now (mkSub ldUserName ldAliasName)
+      jwk <- asks envJwk
+      eJwt <- liftIO $ runExceptT $ mkCompactJWT jwk claims
+      let toServerError e = throwError $ err500 { errBody = BSU.fromString $ show e}
+      either toServerError (pure . Just) eJwt
+    PasswordCheckFail    -> pure Nothing
 
-handleNewUser :: Credentials -> Handler (Maybe CompactJWT)
-handleNewUser Credentials{..} = do
-  when (Text.null credPassword) $
+handleNewUser :: UserNew -> Handler (Maybe CompactJWT)
+handleNewUser UserNew{..} = do
+  when (Text.null unPassword) $
     throwError $ err400 { errBody = "Password cannot be empty" }
-  first <- runDb $ (null :: [Entity User] -> Bool) <$> getAll
+  isFirst <- runDb $ (null :: [Entity User] -> Bool) <$> getAll
   eventSourceId <- runDb $ insert EventSource
-  user <- runDb $ insert $ User credName first eventSourceId
-  password <- unPassHash <$> hashPass (Pass credPassword)
+  user <- runDb $ insert $ User unUserName isFirst eventSourceId
+  password <- hashPassword (mkPassword unPassword)
   runDb $ insert_ $ AuthPwd user password
+  runDb $ insert_ $ Alias unUserName user
   now <- liftIO getCurrentTime
-  let journalFkAlias = Nothing
-      journalCreated = now
-      journalEvent = EventCreation
-      journalDescription = ""
-      journalSubject = SubjectUser
-      journalFkEventSource = eventSourceId
-  runDb $ insert_ Journal{..}
-  pure Nothing
-  -- insert user
-  -- insert authpwd
-  -- insert journal
+  runDb $ insert_ $
+    let journalFkAlias = Nothing
+        journalCreated = now
+        journalEvent = EventCreation
+        journalDescription = ""
+        journalSubject = SubjectUser
+        journalFkEventSource = eventSourceId
+    in  Journal{..}
+  runDb $ insert_ $
+    let journalFkAlias = Nothing
+        journalCreated = now
+        journalEvent = EventCreation
+        journalDescription = ""
+        journalSubject = SubjectAlias
+        journalFkEventSource = eventSourceId
+    in  Journal{..}
+  let claims = mkClaims now (mkSub unUserName unUserName)
+  jwk <- asks envJwk
+  eJwt <- liftIO $ runExceptT $ mkCompactJWT jwk claims
+  let toServerError e = throwError $ err500 { errBody = BSU.fromString $ show e}
+  either toServerError (pure . Just) eJwt
 
 handleDoesUserExist :: Text -> Handler Bool
 handleDoesUserExist str = runDb $ isJust <$> getBy (UUserName str)
 
+checkClearance :: UserInfo -> Text -> Rank -> Handler ()
+checkClearance UserInfo{..} theShow minRank =
+  unless uiIsSiteAdmin $ do
+    case Map.lookup theShow uiClearances of
+      Just rank -> when (rank < minRank) $ throwError err403
+      Nothing   -> throwError err403
+
 handleEpisodeNew :: Text -> UserInfo -> EpisodeNew -> Handler ()
-handleEpisodeNew theShow UserInfo{..} EpisodeNew{..} = do
+handleEpisodeNew theShow ui@UserInfo{..} EpisodeNew{..} = do
   mShow <- runDb $ getBy $ UPodcastIdentifier theShow
   episodeFkPodcast <- maybe (throwError $ err500 { errBody = "show not found" })
                             (pure . entityKey) mShow
-  -- TODO: verify clearance
+  checkClearance ui theShow RankModerator
+  let Alias{..} = uiAlias
   now <- liftIO getCurrentTime
   when (newTitle == "") $
     throwError $ err400 { errBody = "title field is mandatory" }
@@ -218,10 +312,13 @@ handleEpisodeNew theShow UserInfo{..} EpisodeNew{..} = do
       episodeFkEventSource = eventSourceId
   runDb $ insert_ Episode{..}
   let journalFkEventSource = eventSourceId
-      -- TODO: correct alias
-      journalFkAlias = Nothing
+      journalFkAlias = Just uiKeyAlias
       journalCreated = now
       journalEvent = EventCreation
       journalDescription = ""
       journalSubject = SubjectEpisode
   runDb $ insert_ Journal{..}
+
+handleAliasRename :: UserInfo -> Text -> Handler ()
+handleAliasRename UserInfo{..} new =
+  runDb $ update uiKeyAlias [ AliasName =. new ]

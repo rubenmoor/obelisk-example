@@ -8,7 +8,7 @@
 
 module Common where
 
-import           Common.Auth              (AuthProtect, CompactJWT, Credentials)
+import           Common.Auth              (AuthProtect, CompactJWT, LoginData, UserNew)
 import           Control.Applicative      (Applicative (pure))
 import           Control.Category         (Category (id))
 import           Data.Aeson               (FromJSON, ToJSON)
@@ -48,11 +48,12 @@ type RoutesApi = "api" :>
    :<|> "epsiode" :> Capture "podcast_id" Text :>
     ( AuthProtect "jwt" :> RouteEpisodeNew
     )
+   :<|> AuthProtect "jwt" :> "alias" :> "rename" :> ReqBody '[JSON] Text :> Post '[JSON] ()
   )
 
-type RouteGrantAuthPwd  = "login"  :> ReqBody '[JSON] Credentials :> Post '[JSON] (Maybe CompactJWT)
-type RouteNewUser       = "new"    :> ReqBody '[JSON] Credentials :> Post '[JSON] (Maybe CompactJWT)
-type RouteDoesUserExist = "exists" :> ReqBody '[JSON] Text        :> Post '[JSON] Bool
+type RouteGrantAuthPwd  = "login"  :> ReqBody '[JSON] LoginData :> Post '[JSON] (Maybe CompactJWT)
+type RouteNewUser       = "new"    :> ReqBody '[JSON] UserNew   :> Post '[JSON] (Maybe CompactJWT)
+type RouteDoesUserExist = "exists" :> ReqBody '[JSON] Text      :> Post '[JSON] Bool
 
 -- episode
 

@@ -42,7 +42,8 @@ derivePersistField "Event"
 
 -- subject of journal entry
 data Subject
-  = SubjectUser -- cases: new user, user changes alias or password, receives new clearance
+  = SubjectUser -- cases: new user, user changes password, receives new clearance
+  | SubjectAlias
   | SubjectEpisode
   | SubjectPodcast
   deriving (Eq, Ord, Show, Read)

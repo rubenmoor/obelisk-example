@@ -25,8 +25,8 @@ with obelisk;
 let password-repo = pkgs.fetchFromGitHub {
       owner = "cdepillabout";
       repo = "password";
-      rev = "e90b7481af2d63de6b2d9ead3c03ddb798707d22";
-      sha256 = "1ggn2z3j7znhh1gf0hqhdzwrl127x8g54268izg8k16npg90wv6b";
+      rev = "6b243c282ca3d5fed50fbabe0f25bf152ad8f8cf";
+      sha256 = "1qkhyd3x67dgag2xz32sd94n3zyhr1r2n0j8p2rlva74ar8qdgln";
     };
 in
   project ./. ({ ... }: {

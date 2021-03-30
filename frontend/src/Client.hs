@@ -6,8 +6,8 @@
 
 module Client where
 
-import           Common.Auth           (CompactJWT, Credentials (..))
 import           Common         (EpisodeNew, RoutesApi)
+import           Common.Auth    (CompactJWT, LoginData (..), UserNew (..))
 import           Data.Bool      (Bool)
 import           Data.Data      (Proxy (..))
 import           Data.Either    (Either)
@@ -20,13 +20,13 @@ import           Servant.Reflex (BaseUrl (..), ReqResult, SupportsServantReflex,
 
 postAuthenticate
   :: SupportsServantReflex t m
-  => Dynamic t (Either Text Credentials)
+  => Dynamic t (Either Text LoginData)
   -> Event t ()
   -> m (Event t (ReqResult () (Maybe CompactJWT)))
 
 postAuthNew
   :: SupportsServantReflex t m
-  => Dynamic t (Either Text Credentials)
+  => Dynamic t (Either Text UserNew)
   -> Event t ()
   -> m (Event t (ReqResult () (Maybe CompactJWT)))
 
@@ -44,7 +44,17 @@ postEpisodeNew
   -> Event t ()
   -> m (Event t (ReqResult () ()))
 
-((postAuthenticate :<|> postAuthNew :<|> postUserExists) :<|> postEpisodeNew) =
+postAliasRename
+  :: SupportsServantReflex t m
+  => Dynamic t (Either Text CompactJWT)
+  -> Dynamic t (Either Text Text)
+  -> Event t ()
+  -> m (Event t (ReqResult () ()))
+
+((postAuthenticate :<|> postAuthNew :<|> postUserExists)
+   :<|> (postEpisodeNew)
+   :<|> postAliasRename
+ ) =
   client (Proxy :: Proxy RoutesApi)
          (Proxy :: Proxy (m :: * -> *))
          (Proxy :: Proxy ())

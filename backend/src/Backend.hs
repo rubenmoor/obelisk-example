@@ -10,12 +10,13 @@
 
 module Backend where
 
-import           Route                           (BackendRoute (BackendRoute_Api, BackendRoute_Missing, BackendRoute_Show),
+import           Route                           (BackendRoute (..),
                                                   FrontendRoute,
                                                   fullRouteEncoder)
 
 import           AppData                         (EnvApplication (..))
 import           Common                          (routes)
+import           Common.Auth                     (UserInfo)
 import           Config                          (Params (..))
 import           Control.Applicative             (Applicative (pure))
 import           Control.Monad.Logger            (NoLoggingT (..))
@@ -35,8 +36,7 @@ import           Database.Persist.MySQL          (ConnectInfo (..),
                                                   defaultConnectInfo,
                                                   runMigration, runSqlPool,
                                                   withMySQLPool)
-import           GHC.Base                        (undefined)
-import           Handlers                        (handlers)
+import           Handlers                        (handlers, mkContext)
 import           Model                           (migrateAll)
 import           Obelisk.Backend                 (Backend (..))
 import           Obelisk.Configs                 (ConfigsT,
@@ -44,24 +44,14 @@ import           Obelisk.Configs                 (ConfigsT,
                                                   runConfigsT)
 import           Obelisk.ExecutableConfig.Lookup (getConfigs)
 import           Obelisk.Route                   (pattern (:/))
-import           Servant.Server                  (Context ((:.), EmptyContext),
-                                                  serveSnapWithContext)
+import           Servant.Server                  (Context, serveSnapWithContext)
 import           Snap.Core                       (Snap)
 import           System.Exit                     (ExitCode (ExitFailure),
                                                   exitWith)
 import           System.IO                       (IO)
-import Data.Pool (Pool)
-import Database.Gerippe (SqlBackend)
-import Common.Auth (UserInfo)
 
 backendApp :: Context '[Snap UserInfo] -> EnvApplication -> Snap ()
 backendApp ctx = runReaderT $ serveSnapWithContext routes ctx handlers
-
-mkContext :: JWK -> Pool SqlBackend -> Context '[Snap UserInfo]
-mkContext jwk pool =
-  let authHandler :: Snap UserInfo
-      authHandler = undefined
-  in  authHandler :. EmptyContext
 
 backend :: Backend BackendRoute FrontendRoute
 backend = Backend
@@ -78,9 +68,6 @@ backend = Backend
           , connectDatabase = paramDbDatabase
           , connectOptions = [ CharsetName "utf8mb4" ]
           }
-        -- ctxJWT = JWTSettings (SomeJWKResolver $ JWKSet [jwk])
-        --                      (defaultJWTValidationSettings $ const True)
-        -- ctx = ctxJWT :. EmptyContext
     runNoLoggingT $ withMySQLPool connectInfo 10 $ \pool -> do
       -- TODO: why runResourceT and not liftIO?
       runResourceT $ runSqlPool (runMigration migrateAll) pool
@@ -88,6 +75,7 @@ backend = Backend
             { envPool      = pool
             , envMediaDir  = paramMediaDir
             , envUrl       = paramUrl
+            , envJwk       = jwk
             }
           ctx = mkContext jwk pool
       NoLoggingT $ serve $ \case
@@ -104,5 +92,5 @@ getConfigOrExit filename = do
   maybe (exitWithFailure $ "could not decode " <> filename) pure $ Aeson.decodeStrict str
   where
     exitWithFailure msg = liftIO $ do
-      putStrLn msg -- "Could not parse configuration"
+      putStrLn msg
       exitWith $ ExitFailure 1
