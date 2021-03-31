@@ -1,6 +1,7 @@
+{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell   #-}
 
 module Model.Custom
   ( Visibility (..)
@@ -9,11 +10,13 @@ module Model.Custom
   , Subject (..)
   ) where
 
-import Data.Eq (Eq)
-import Data.Ord (Ord)
-import Text.Show (Show)
-import Text.Read (Read)
-import Database.Persist.TH (derivePersistField)
+import           Data.Aeson          (FromJSON, ToJSON)
+import           Data.Eq             (Eq)
+import           Data.Ord            (Ord)
+import           Database.Persist.TH (derivePersistField)
+import           GHC.Generics        (Generic)
+import           Text.Read           (Read)
+import           Text.Show           (Show)
 
 data Visibility
   = VisibilityPublic
@@ -26,7 +29,10 @@ data Rank
   = RankModerator
   | RankAdmin
   | RankOwner
-  deriving (Eq, Ord, Show, Read)
+  deriving (Eq, Ord, Show, Read, Generic)
+
+instance FromJSON Rank
+instance ToJSON Rank
 
 derivePersistField "Rank"
 

@@ -61,5 +61,6 @@ in
       base64 = self.callHackage "base64" "0.3.1.1" {};
       password-instances = self.callCabal2nix "password-instances"
         (password-repo + /password-instances) {};
+      clay = self.callHackage "clay" "0.13.3" {};
     };
   })

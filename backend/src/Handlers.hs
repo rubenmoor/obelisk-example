@@ -120,8 +120,9 @@ handlers :: ServerT Routes '[Snap UserInfo] Handler
 handlers =
     handleFeedXML
   :<|>  (handleGrantAuthPwd
-    :<|> handleNewUser
+    :<|> handleUserNew
     :<|> handleDoesUserExist
+    :<|> handleUserGet
         )
   :<|> handleEpisodeNew
   :<|> handleAliasRename
@@ -237,8 +238,8 @@ handleGrantAuthPwd LoginData{..} = do
       either toServerError (pure . Just) eJwt
     PasswordCheckFail    -> pure Nothing
 
-handleNewUser :: UserNew -> Handler (Maybe CompactJWT)
-handleNewUser UserNew{..} = do
+handleUserNew :: UserNew -> Handler (Maybe CompactJWT)
+handleUserNew UserNew{..} = do
   when (Text.null unPassword) $
     throwError $ err400 { errBody = "Password cannot be empty" }
   isFirst <- runDb $ (null :: [Entity User] -> Bool) <$> getAll
@@ -272,6 +273,9 @@ handleNewUser UserNew{..} = do
 
 handleDoesUserExist :: Text -> Handler Bool
 handleDoesUserExist str = runDb $ isJust <$> getBy (UUserName str)
+
+handleUserGet :: UserInfo -> Handler UserInfo
+handleUserGet = pure
 
 checkClearance :: UserInfo -> Text -> Rank -> Handler ()
 checkClearance UserInfo{..} theShow minRank =

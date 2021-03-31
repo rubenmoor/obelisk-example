@@ -96,7 +96,10 @@ data UserInfo = UserInfo
   , uiAlias       :: Alias
   , uiKeyAlias    :: Key Alias
   , uiClearances  :: Map Text Rank
-  }
+  } deriving (Generic)
+
+instance FromJSON UserInfo
+instance ToJSON UserInfo
 
 -- type instance AuthServerData (AuthProtect "jwt") = UserInfo
 

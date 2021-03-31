@@ -7,6 +7,7 @@ library
   hs-source-dirs: src
   build-depends:
       base
+    , clay
     , common
     , containers
     , data-default
@@ -15,7 +16,6 @@ library
     , obelisk-executable-config-lookup
     , obelisk-generated-static
     , obelisk-route
-    , raw-strings-qq
     , reflex-dom
     , servant
     , servant-reflex

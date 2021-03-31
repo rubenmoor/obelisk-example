@@ -7,7 +7,7 @@
 module Client where
 
 import           Common         (EpisodeNew, RoutesApi)
-import           Common.Auth    (CompactJWT, LoginData (..), UserNew (..))
+import           Common.Auth    (CompactJWT, LoginData (..), UserNew (..), UserInfo)
 import           Data.Bool      (Bool)
 import           Data.Data      (Proxy (..))
 import           Data.Either    (Either)
@@ -36,6 +36,12 @@ postUserExists
   -> Event t ()
   -> m (Event t (ReqResult () Bool))
 
+postAuthUserGet
+  :: SupportsServantReflex t m
+  => Dynamic t (Either Text CompactJWT) -- compactJWT
+  -> Event t ()
+  -> m (Event t (ReqResult () UserInfo))
+
 postEpisodeNew
   :: SupportsServantReflex t m
   => Dynamic t (Either Text Text) -- podcast identifier
@@ -51,7 +57,7 @@ postAliasRename
   -> Event t ()
   -> m (Event t (ReqResult () ()))
 
-((postAuthenticate :<|> postAuthNew :<|> postUserExists)
+((postAuthenticate :<|> postAuthNew :<|> postUserExists :<|> postAuthUserGet)
    :<|> (postEpisodeNew)
    :<|> postAliasRename
  ) =

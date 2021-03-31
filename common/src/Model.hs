@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE DerivingStrategies         #-}
 {-# LANGUAGE EmptyDataDecls             #-}
 {-# LANGUAGE FlexibleContexts           #-}
@@ -20,6 +21,7 @@ module Model
   , EntityField (..)
   ) where
 
+import           Data.Aeson              (FromJSON, ToJSON)
 import           Data.Text               (Text)
 import           Data.Time               (Day, UTCTime)
 import           Database.Persist.TH     (mkMigrate, mkPersist,
@@ -28,6 +30,7 @@ import           Database.Persist.TH     (mkMigrate, mkPersist,
 import           Data.Password.Argon2    (Argon2, PasswordHash)
 import           Data.Password.Instances ()
 import           Database.Gerippe        (PersistEntity (EntityField, Unique))
+import           GHC.Generics            (Generic)
 import           Model.Custom            (Event (..), Rank (..), Subject (..),
                                           Visibility (..))
 
@@ -74,6 +77,7 @@ Alias                            -- one of several identities
   name             Text
   fkUser           UserId
   UAliasName name
+  deriving Generic
 Clearance
   fkAlias          AliasId
   fkPodcast        PodcastId
@@ -92,3 +96,6 @@ Journal
   description      Text
 EventSource
 |]
+
+instance FromJSON Alias
+instance ToJSON Alias
