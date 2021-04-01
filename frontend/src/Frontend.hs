@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE RecursiveDo         #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
@@ -20,21 +21,27 @@ import           Reflex.Dom.Core           (InputElement (..), blank, button,
                                             el, elAttr,
                                             inputElementConfig_setValue, text)
 
-import           Clay                      (paddingBottom, Size, maxWidth, marginBottom, borderRadius, zIndex, top, left, translate, transform, absolute, right, block, Auto(auto), important, Center (center), Color, Css,
-                                            None (none), Selector, after,
-                                            backgroundColor, body, border,
-                                            borderBox, both, bottom, boxSizing,
-                                            clear, color, compact, content,
-                                            darkgray, display, displayTable,
-                                            fixed, float, floatLeft, floatRight,
+import           Clay                      (shadowWithBlur, bsColor, boxShadow, Auto (auto), Center (center), Color,
+                                            Css, None (none), Selector,
+                                            absolute, after, backgroundColor,
+                                            block, body, border, borderBox,
+                                            borderRadius, both, bottom,
+                                            boxShadow', boxSizing, clear, color,
+                                            compact, content, display,
+                                            displayTable, easeInOut, fixed,
+                                            float, floatLeft, floatRight, focus,
                                             fontFamily, fontSize, fontStyle,
-                                            gray, height, inline, italic,
-                                            lightgray, margin, padding, pct,
+                                            gray, height, important, input,
+                                            italic, left, lightgray, margin,
+                                            marginBottom, maxWidth, outline,
+                                            padding, paddingBottom, pct,
                                             position, pt, px, queryOnly, red,
                                             renderSelector, renderWith, rgb,
-                                            sansSerif, solid, star,
-                                            stringContent, textAlign, white,
-                                            width, (#), (?), (^=))
+                                            right, sansSerif, sec, solid, star,
+                                            stringContent, textAlign, top,
+                                            transform, transition, translate,
+                                            white, width, zIndex, ( # ), (?),
+                                            (^=))
 import           Clay.Media                (screen)
 import qualified Clay.Media                as Media
 import           Clay.Render               (htmlInline)
@@ -42,15 +49,15 @@ import           Client                    (postEpisodeNew)
 import           Common                    (EpisodeNew (..), convertToFilename)
 import           Control.Applicative       (Applicative (pure, (<*>)))
 import           Control.Category          (Category ((.)))
-import           Control.Monad             (Monad ((>>=)), mapM_)
+import           Control.Monad             (Monad ((>>=)))
 import           Control.Monad.IO.Class    (MonadIO (liftIO))
 import           Control.Monad.Trans.Class (MonadTrans (lift))
-import           Data.Bool                 (not, (&&), (||), bool, Bool(True, False))
+import           Data.Bool                 (Bool (False, True), bool, not)
 import           Data.Default              (Default (def))
 import           Data.Either               (Either (..))
 import           Data.Foldable             (traverse_)
-import           Data.Function             (const, flip, ($), (&))
-import           Data.Functor              (void, Functor (fmap), ($>), (<$>))
+import           Data.Function             (flip, ($), (&))
+import           Data.Functor              (Functor (fmap), void, ($>), (<$>))
 import           Data.Map                  (Map)
 import           Data.Maybe                (Maybe (..), fromMaybe, maybe)
 import           Data.Monoid               ((<>))
@@ -61,20 +68,20 @@ import           Data.Time                 (defaultTimeLocale, formatTime,
 import           Data.Tuple                (fst, snd)
 import           Data.Witherable           (mapMaybe)
 import           Obelisk.Route.Frontend    (RoutedT)
-import           Reflex.Dom                (AttributeName, foldDyn, Prerender(prerender), elAttr', el', foldDynMaybe, attachPromptlyDynWithMaybe, attachPromptlyDynWith, leftmost, elDynAttr', DomBuilder (DomBuilderSpace, inputElement),
+import           Reflex.Dom                (AttributeName, DomBuilder (DomBuilderSpace, inputElement),
                                             Element, EventName (Click),
                                             EventResult, HasDomEvent (domEvent),
                                             MonadHold (holdDyn),
                                             PerformEvent (performEvent),
                                             PostBuild (getPostBuild), constDyn,
-                                            dynText, elClass, elClass',
-                                            elDynAttr,
+                                            dynText, elAttr', elClass',
+                                            elDynAttr, elDynAttr',
                                             elementConfig_initialAttributes,
+                                            foldDynMaybe,
                                             inputElementConfig_elementConfig,
-                                            prerender_, toggle, (.~), (=:))
+                                            leftmost, prerender_, (.~), (=:))
 import           Route                     (FrontendRoute)
 import           Servant.Common.Req        (reqFailure)
-import GHC.Num (Num((-)))
 
 
 for :: Functor f => f a -> (a -> b) -> f b
@@ -82,6 +89,9 @@ for = flip fmap
 
 anthrazit :: Color
 anthrazit = rgb 8 20 48 -- #081430;
+
+neonpink :: Color
+neonpink = rgb 254 1 184
 
 style :: Css -> Map Text Text
 style css = "style" =: Lazy.toStrict (renderWith htmlInline [] css)
@@ -202,16 +212,10 @@ navBorder = border solid (px 1) lightgray
 
 elLabelInput conf label id = do
   elAttr "label" ("for" =: id) $ el "h3" $ text label
-  let css = do
-        fontSize (pt 24)
-        padding (px 8) (px 8) (px 8) (px 8)
-        borderRadius (px 12) (px 12) (px 12) (px 12)
-        border solid (px 1) gray
-        marginBottom (px 12)
   i <- inputElement $ conf
          & inputElementConfig_elementConfig
          . elementConfig_initialAttributes
-         .~ ("id" =: id <> styleA css <> "class" =: rcClass onMobileWidthFull)
+         .~ ("id" =: id <> "class" =: rcClass onMobileWidthFull)
   let str = _inputElement_value i
   pure $ fmap (\s -> if Text.null s then Nothing else Just s) str
 
@@ -267,8 +271,8 @@ htmlBody = do
     let eLogin = domEvent Click elLogin
         eRegister = domEvent Click elRegister
     let eToggle = domEvent Click elBars
-        toggleFunc True  s = Just $ not s -- toggle btn always toggles
-        toggleFunc False True = Just False -- other btns only hide
+        toggleFunc True  s     = Just $ not s -- toggle btn always toggles
+        toggleFunc False True  = Just False -- other btns only hide
         toggleFunc False False = Nothing
     dynToggle <- foldDynMaybe toggleFunc False $
       leftmost [eToggle $> True, eLogin $> False, eRegister $> False]
@@ -299,6 +303,7 @@ htmlBody = do
       divFieldDescription $ text "You enter your password only once. There are \
                                  \no invalid passwords except for an empty one.\
                                  \ Password reset via email can be optionally added later."
+      eSend <- button "Send"
       pure (elClose, userName, password)
     let eClose = domEvent Click elClose
     dynShowOverlay <- holdDyn False $ leftmost [eRegister $> True, eClose $> False]
@@ -417,7 +422,8 @@ htmlHead = do
       clear both
       display displayTable
     ".row" ? width (pct 100)
-    traverse_ rcCss
+
+    (traverse_ :: (ResponsiveClass -> Css) -> [ResponsiveClass] -> Css) rcCss
       [ onMobileDisplayNone
       , onDesktopDisplayNone
       , onMobileFloatLeft
@@ -433,7 +439,17 @@ htmlHead = do
       , onMobileWidthFull
       , onDesktopMaxWidth370px
       ]
-
+    input ? do
+      fontSize (pt 24)
+      padding (px 8) (px 8) (px 8) (px 8)
+      borderRadius (px 12) (px 12) (px 12) (px 12)
+      border solid (px 1) gray
+      marginBottom (px 12)
+      outline none (px 0) gray
+      transition "all" (sec 0.3) easeInOut (sec 0)
+    input # focus ? do
+      borderRadius (px 12) (px 12) (px 12) (px 12)
+      boxShadow [bsColor neonpink $ shadowWithBlur (px 0) (px 0) (px 5)]
 
 frontend :: Frontend (R FrontendRoute)
 frontend = Frontend
