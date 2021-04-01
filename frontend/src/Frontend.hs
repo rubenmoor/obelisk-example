@@ -1,12 +1,14 @@
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE NoImplicitPrelude   #-}
+{-# LANGUAGE OverloadedLists     #-}
 {-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE RecursiveDo         #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module Frontend where
 
@@ -15,36 +17,17 @@ import qualified Data.Text                 as Text
 
 import           Obelisk.Frontend          (Frontend (..), ObeliskWidget)
 import           Obelisk.Generated.Static  (static)
-import           Obelisk.Route             (R)
+import           Obelisk.Route             (pattern (:/), R)
 
-import           Reflex.Dom.Core           (InputElement (..), blank, button,
-                                            el, elAttr,
+import           Reflex.Dom.Core           (blank, button, el, elAttr,
                                             inputElementConfig_setValue, text)
 
-import           Clay                      (shadowWithBlur, bsColor, boxShadow, Auto (auto), Center (center), Color,
-                                            Css, None (none), Selector,
-                                            absolute, after, backgroundColor,
-                                            block, body, border, borderBox,
-                                            borderRadius, both, bottom,
-                                            boxShadow', boxSizing, clear, color,
-                                            compact, content, display,
-                                            displayTable, easeInOut, fixed,
-                                            float, floatLeft, floatRight, focus,
-                                            fontFamily, fontSize, fontStyle,
-                                            gray, height, important, input,
-                                            italic, left, lightgray, margin,
-                                            marginBottom, maxWidth, outline,
-                                            padding, paddingBottom, pct,
-                                            position, pt, px, queryOnly, red,
-                                            renderSelector, renderWith, rgb,
-                                            right, sansSerif, sec, solid, star,
-                                            stringContent, textAlign, top,
-                                            transform, transition, translate,
-                                            white, width, zIndex, ( # ), (?),
-                                            (^=))
-import           Clay.Media                (screen)
-import qualified Clay.Media                as Media
-import           Clay.Render               (htmlInline)
+import           Clay                      (Center (center), None (none),
+                                            absolute, backgroundColor, block,
+                                            color, compact, display, fontStyle,
+                                            italic, padding, position, px, red,
+                                            renderWith, right, textAlign, white,
+                                            zIndex)
 import           Client                    (postEpisodeNew)
 import           Common                    (EpisodeNew (..), convertToFilename)
 import           Control.Applicative       (Applicative (pure, (<*>)))
@@ -55,169 +38,46 @@ import           Control.Monad.Trans.Class (MonadTrans (lift))
 import           Data.Bool                 (Bool (False, True), bool, not)
 import           Data.Default              (Default (def))
 import           Data.Either               (Either (..))
-import           Data.Foldable             (traverse_)
-import           Data.Function             (flip, ($), (&))
-import           Data.Functor              (Functor (fmap), void, ($>), (<$>))
-import           Data.Map                  (Map)
+import           Data.Function             (($), (&))
+import           Data.Functor              (Functor (fmap), ($>), (<$>))
 import           Data.Maybe                (Maybe (..), fromMaybe, maybe)
 import           Data.Monoid               ((<>))
-import           Data.Text                 (Text, toUpper, unwords)
+import           Data.Text                 (toUpper, unwords)
 import qualified Data.Text.Lazy            as Lazy
 import           Data.Time                 (defaultTimeLocale, formatTime,
                                             getCurrentTime)
 import           Data.Tuple                (fst, snd)
 import           Data.Witherable           (mapMaybe)
-import           Obelisk.Route.Frontend    (RoutedT)
-import           Reflex.Dom                (AttributeName, DomBuilder (DomBuilderSpace, inputElement),
-                                            Element, EventName (Click),
-                                            EventResult, HasDomEvent (domEvent),
+import           MediaQuery                (ResponsiveClass (rcClass),
+                                            onDesktopBorder,
+                                            onDesktopDisplayImportant,
+                                            onDesktopDisplayNone,
+                                            onMobileAtBottom,
+                                            onMobileDisplayNone,
+                                            onMobileFontBig, onMobileHeight80,
+                                            onMobileWidthAuto, respClass,
+                                            respClasses)
+import           Obelisk.Route.Frontend    (routeLink, RoutedT, subRoute_)
+import           PagesUser                 (pageRegister)
+import           Reflex.Dom                (DomBuilder (inputElement),
+                                            EventName (Click),
+                                            HasDomEvent (domEvent),
                                             MonadHold (holdDyn),
                                             PerformEvent (performEvent),
                                             PostBuild (getPostBuild), constDyn,
-                                            dynText, elAttr', elClass',
-                                            elDynAttr, elDynAttr',
-                                            elementConfig_initialAttributes,
-                                            foldDynMaybe,
-                                            inputElementConfig_elementConfig,
+                                            dynText, elAttr', elDynAttr,
+                                            elDynAttr', ffor, foldDynMaybe,
                                             leftmost, prerender_, (.~), (=:))
-import           Route                     (FrontendRoute)
+import           Route                     (FrontendRoute (..))
 import           Servant.Common.Req        (reqFailure)
+import Shared (cssGeneral, elLabelInput, iFa', iFa, style, navBorder)
 
 
-for :: Functor f => f a -> (a -> b) -> f b
-for = flip fmap
-
-anthrazit :: Color
-anthrazit = rgb 8 20 48 -- #081430;
-
-neonpink :: Color
-neonpink = rgb 254 1 184
-
-style :: Css -> Map Text Text
-style css = "style" =: Lazy.toStrict (renderWith htmlInline [] css)
-
-styleA :: Css -> Map AttributeName Text
-styleA css = "style" =: Lazy.toStrict (renderWith htmlInline [] css)
-
-elClassStyle :: DomBuilder t m => Text -> Text -> Css -> m a -> m a
-elClassStyle e class' css inner =
-  let attrs = "class" =: class'
-           <> style css
-  in  elAttr e attrs inner
-
-iFa' :: DomBuilder t m => Text -> m (Element EventResult (DomBuilderSpace m) t)
-iFa' class' = fst <$> elClass' "i" class' blank
-
-iFa :: DomBuilder t m => Text -> m ()
-iFa = void . iFa'
-
-desktopOnly :: Css -> Css
-desktopOnly = queryOnly screen [Media.minWidth $ px 768]
-
-mobileOnly :: Css -> Css
-mobileOnly = queryOnly screen [Media.maxWidth $ px 767]
-
-data ResponsiveClass = ResponsiveClass
-  { rcClass :: Text
-  , rcCss   :: Css
-  }
-
-mkResponsiveClass :: (Css -> Css) -> Css -> Selector -> ResponsiveClass
-mkResponsiveClass mq css className = ResponsiveClass
-  { rcClass = Text.drop 1 $ Lazy.toStrict $ renderSelector className
-  , rcCss   = mq $ className ? css
-  }
-
-onMobileFloatRight :: ResponsiveClass
-onMobileFloatRight =
-  mkResponsiveClass mobileOnly (float floatRight) ".onMobileFloatRight"
-
-onMobileFloatLeft :: ResponsiveClass
-onMobileFloatLeft =
-  mkResponsiveClass mobileOnly (float floatLeft) ".onMobileFloatLeft"
-
-onDesktopDisplayNone :: ResponsiveClass
-onDesktopDisplayNone =
-  mkResponsiveClass desktopOnly (display none) ".onDesktopDisplayNone"
-
-onMobileDisplayNone :: ResponsiveClass
-onMobileDisplayNone =
-  mkResponsiveClass mobileOnly (display none) ".onMobileDisplayNone"
-
-onDesktopDisplayImportant :: ResponsiveClass
-onDesktopDisplayImportant =
-  mkResponsiveClass desktopOnly (important $ display block) ".onDesktopDisplayImportant"
-
-onMobileAtBottom :: ResponsiveClass
-onMobileAtBottom =
-  let css = do
-        position fixed
-        bottom (pct 0)
-  in  mkResponsiveClass mobileOnly css ".onMobileAtBottom"
-
-onMobileHeight80 :: ResponsiveClass
-onMobileHeight80 =
-  mkResponsiveClass mobileOnly (height $ px 80) ".onMobileHeight80"
-
-onMobileWidthAuto :: ResponsiveClass
-onMobileWidthAuto =
-  mkResponsiveClass mobileOnly (do width auto
-                                   float none
-                               ) ".onMobileWidthAuto"
-
-onDesktopBorder :: ResponsiveClass
-onDesktopBorder =
-  mkResponsiveClass desktopOnly navBorder ".onDesktopBorder"
-
-onMobileFontBig :: ResponsiveClass
-onMobileFontBig =
-  mkResponsiveClass mobileOnly (fontSize $ pt 40) ".onMobileFontBig"
-
-onMobileMkOverlay :: ResponsiveClass
-onMobileMkOverlay =
-  mkResponsiveClass mobileOnly (do -- width $ pct 100
-                                   height $ pct 100
-                                   top $ px 0
-                                   important $ paddingBottom $ px 100
-                               ) ".onMobileMkOverlay"
-
-onDesktopMkOverlay :: ResponsiveClass
-onDesktopMkOverlay =
-  mkResponsiveClass desktopOnly
-    (do position absolute
-        top (pct 50)
-        left (pct 50)
-        transform (translate (pct $ -50) $ pct $ -50)
-    ) ".onDesktopMkOverlay"
-
-onMobileWidthFull :: ResponsiveClass
-onMobileWidthFull =
-  mkResponsiveClass mobileOnly (width $ pct 100) ".onMobileWidthFull"
-
-onDesktopMaxWidth370px :: ResponsiveClass
-onDesktopMaxWidth370px =
-  mkResponsiveClass desktopOnly (maxWidth $ px 370) ".onDesktopMaxWidth370px"
-
-classes :: [Text] -> Map Text Text
-classes ls = "class" =: unwords ls
-
-respClasses :: [ResponsiveClass] -> Map Text Text
-respClasses = classes . fmap rcClass
-
-respClass :: ResponsiveClass -> Map Text Text
-respClass rc = "class" =: rcClass rc
-
-navBorder :: Css
-navBorder = border solid (px 1) lightgray
-
-elLabelInput conf label id = do
-  elAttr "label" ("for" =: id) $ el "h3" $ text label
-  i <- inputElement $ conf
-         & inputElementConfig_elementConfig
-         . elementConfig_initialAttributes
-         .~ ("id" =: id <> "class" =: rcClass onMobileWidthFull)
-  let str = _inputElement_value i
-  pure $ fmap (\s -> if Text.null s then Nothing else Just s) str
+pageHome
+  :: forall t js s (m :: * -> *)
+  .  DomBuilder t m
+  =>  m ()
+pageHome = pure ()
 
 htmlBody
   :: forall t js (m :: * -> *)
@@ -239,7 +99,7 @@ htmlBody = do
                        zIndex 2
                    ))
   (eLogin, eRegister) <- divNavBar $ mdo
-    let navButtonAttrs = for displayNav $ \d ->
+    let navButtonAttrs = ffor displayNav $ \d ->
              "class" =: unwords [ "col-2"
                                 , rcClass onMobileHeight80
                                 , rcClass onDesktopDisplayImportant
@@ -250,12 +110,12 @@ htmlBody = do
                    )
         spanNavBtn = fmap fst . elDynAttr' "span" navButtonAttrs
     elLogin <- spanNavBtn $ text "Login"
-    elRegister <- spanNavBtn $ text "Register"
+    elRegister <- routeLink (FrontendRoute_Register :/ ()) $ spanNavBtn $ text "Register"
 
     let spanNavBtnHome = fmap fst . elAttr' "span"
           ("class" =: unwords [ "col-2"
                               , rcClass onMobileWidthAuto
-                              , rcClass onDesktopBorder
+                              , rcClass $ onDesktopBorder navBorder
                               ])
     elHome <- spanNavBtnHome $ do
       iFa "fas fa-home"
@@ -279,36 +139,10 @@ htmlBody = do
     let displayNav = bool none block <$> dynToggle
     pure (eLogin, eRegister)
 
-  mdo
-    -- registration / user new
-    let overlayAttrs = for displayOverlay $ \d ->
-          respClasses [ onMobileMkOverlay
-                      , onDesktopMkOverlay
-                      ] <>
-          style (do backgroundColor white
-                    padding (px 24) (px 24) (px 24) (px 24)
-                    position absolute
-                    zIndex 1
-                    display d
-                    )
-        divOverlay = elDynAttr "div" overlayAttrs
-    (elClose, userName, password) <- divOverlay $ do
-      let spanClose = elAttr' "span" (style $ float floatRight) $ iFa "fas fa-times"
-          divFieldDescription = elAttr "div" $ respClass onDesktopMaxWidth370px
-      elClose <- fst <$> spanClose
-      userName <- elLabelInput def "Username" "username"
-      divFieldDescription $ text "Your user name is not publicly visible. You \
-                                 \can choose your public alias in the next step."
-      password <- elLabelInput def "Password" "password"
-      divFieldDescription $ text "You enter your password only once. There are \
-                                 \no invalid passwords except for an empty one.\
-                                 \ Password reset via email can be optionally added later."
-      eSend <- button "Send"
-      pure (elClose, userName, password)
-    let eClose = domEvent Click elClose
-    dynShowOverlay <- holdDyn False $ leftmost [eRegister $> True, eClose $> False]
-    let displayOverlay = bool none block <$> dynShowOverlay
-    blank
+
+  subRoute_ $ \case
+    FrontendRoute_Main     -> pageHome
+    FrontendRoute_Register -> pageRegister
 
   el "h1" $ text "Create new episode"
   pb <- getPostBuild
@@ -390,66 +224,7 @@ htmlHead = do
                <> "href" =: static @"FontAwesome/css/all.min.css"
                 ) blank
   el "title" $ text "serendipity.works"
-  el "style" $ text $ Lazy.toStrict $ renderWith compact [] $ do
-    body ? do
-      fontFamily ["Abel"] [sansSerif]
-      -- fontSize (pt 42)
-      fontSize (pt 18)
-      color anthrazit
-      backgroundColor lightgray
-      margin (px 0) (px 0) (px 0) (px 0)
-    star ? boxSizing borderBox
-    star # ("class" ^= "col-") ? do
-      float floatRight
-      padding (px 5) (px 5) (px 5) (px 5)
-      width (pct 100)
-    desktopOnly $ do
-      ".col-1"  ? width (pct 8.33)
-      ".col-2"  ? width (pct 16.66)
-      ".col-3"  ? width (pct 25)
-      ".col-4"  ? width (pct 33.33)
-      ".col-5"  ? width (pct 41.66)
-      ".col-6"  ? width (pct 50)
-      ".col-7"  ? width (pct 58.33)
-      ".col-8"  ? width (pct 66.66)
-      ".col-9"  ? width (pct 75)
-      ".col-10" ? width (pct 83.33)
-      ".col-11" ? width (pct 91.66)
-      ".col-12" ? width (pct 100)
-      body ? fontSize (pt 14)
-    ".row" # after ? do
-      content $ stringContent ""
-      clear both
-      display displayTable
-    ".row" ? width (pct 100)
-
-    (traverse_ :: (ResponsiveClass -> Css) -> [ResponsiveClass] -> Css) rcCss
-      [ onMobileDisplayNone
-      , onDesktopDisplayNone
-      , onMobileFloatLeft
-      , onMobileFloatRight
-      , onMobileAtBottom
-      , onMobileHeight80
-      , onDesktopDisplayImportant
-      , onMobileWidthAuto
-      , onDesktopBorder
-      , onMobileFontBig
-      , onMobileMkOverlay
-      , onDesktopMkOverlay
-      , onMobileWidthFull
-      , onDesktopMaxWidth370px
-      ]
-    input ? do
-      fontSize (pt 24)
-      padding (px 8) (px 8) (px 8) (px 8)
-      borderRadius (px 12) (px 12) (px 12) (px 12)
-      border solid (px 1) gray
-      marginBottom (px 12)
-      outline none (px 0) gray
-      transition "all" (sec 0.3) easeInOut (sec 0)
-    input # focus ? do
-      borderRadius (px 12) (px 12) (px 12) (px 12)
-      boxShadow [bsColor neonpink $ shadowWithBlur (px 0) (px 0) (px 5)]
+  el "style" $ text $ Lazy.toStrict $ renderWith compact [] cssGeneral
 
 frontend :: Frontend (R FrontendRoute)
 frontend = Frontend
