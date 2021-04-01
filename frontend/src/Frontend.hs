@@ -20,7 +20,7 @@ import           Reflex.Dom.Core           (InputElement (..), blank, button,
                                             el, elAttr,
                                             inputElementConfig_setValue, text)
 
-import           Clay                      (important, Center (center), Color, Css,
+import           Clay                      (top, left, translate, transform, absolute, right, block, Auto(auto), important, Center (center), Color, Css,
                                             None (none), Selector, after,
                                             backgroundColor, body, border,
                                             borderBox, both, bottom, boxSizing,
@@ -45,7 +45,7 @@ import           Control.Category          (Category ((.)))
 import           Control.Monad             (Monad ((>>=)), mapM_)
 import           Control.Monad.IO.Class    (MonadIO (liftIO))
 import           Control.Monad.Trans.Class (MonadTrans (lift))
-import           Data.Bool                 (bool, Bool(True, False))
+import           Data.Bool                 (not, (&&), (||), bool, Bool(True, False))
 import           Data.Default              (Default (def))
 import           Data.Either               (Either (..))
 import           Data.Foldable             (traverse_)
@@ -61,7 +61,7 @@ import           Data.Time                 (defaultTimeLocale, formatTime,
 import           Data.Tuple                (fst, snd)
 import           Data.Witherable           (mapMaybe)
 import           Obelisk.Route.Frontend    (RoutedT)
-import           Reflex.Dom                (DomBuilder (DomBuilderSpace, inputElement),
+import           Reflex.Dom                (elAttr', el', foldDynMaybe, attachPromptlyDynWithMaybe, attachPromptlyDynWith, leftmost, elDynAttr', DomBuilder (DomBuilderSpace, inputElement),
                                             Element, EventName (Click),
                                             EventResult, HasDomEvent (domEvent),
                                             MonadHold (holdDyn),
@@ -74,6 +74,7 @@ import           Reflex.Dom                (DomBuilder (DomBuilderSpace, inputEl
                                             prerender_, toggle, (.~), (=:))
 import           Route                     (FrontendRoute)
 import           Servant.Common.Req        (reqFailure)
+import GHC.Num (Num((-)))
 
 
 for :: Functor f => f a -> (a -> b) -> f b
@@ -132,7 +133,7 @@ onMobileDisplayNone =
 
 onDesktopDisplayImportant :: ResponsiveClass
 onDesktopDisplayImportant =
-  mkResponsiveClass desktopOnly (important $ display inline) ".onDesktopDisplayImportant"
+  mkResponsiveClass desktopOnly (important $ display block) ".onDesktopDisplayImportant"
 
 onMobileAtBottom :: ResponsiveClass
 onMobileAtBottom =
@@ -145,6 +146,16 @@ onMobileHeight80 :: ResponsiveClass
 onMobileHeight80 =
   mkResponsiveClass mobileOnly (height $ px 80) ".onMobileHeight80"
 
+onMobileWidthAuto :: ResponsiveClass
+onMobileWidthAuto =
+  mkResponsiveClass mobileOnly (do width auto
+                                   float none
+                               ) ".onMobileWidthAuto"
+
+onDesktopBorder :: ResponsiveClass
+onDesktopBorder =
+  mkResponsiveClass desktopOnly navBorder ".onDesktopBorder"
+
 classes :: [Text] -> Map Text Text
 classes ls = "class" =: unwords ls
 
@@ -154,39 +165,78 @@ respClasses = classes . fmap rcClass
 respClass :: ResponsiveClass -> Map Text Text
 respClass rc = "class" =: rcClass rc
 
+navBorder :: Css
+navBorder = border solid (px 1) lightgray
+
 htmlBody
   :: forall t js (m :: * -> *)
   . (ObeliskWidget js t (R FrontendRoute) m)
   => RoutedT t (R FrontendRoute) m ()
-htmlBody = mdo
+htmlBody = do
+
   -- navigation
   let cssNav = do
         textAlign center
         backgroundColor white
-      navButtonAttrs = for showNav $ \d ->
-           "class" =: unwords [ "col-2"
-                              , rcClass onMobileHeight80
-                              , rcClass onDesktopDisplayImportant
-                              ]
-        <> style (do cssNav
-                     display d
-                 )
-      navButton inner = elDynAttr "div" navButtonAttrs inner
-  showNav <- elAttr "div" ("class" =: unwords ["row", rcClass onMobileAtBottom]) $ do
-    navButton $ text "Login"
-    navButton $ text "Register"
-    elAttr "div" ("class" =: unwords ["col-2", rcClass onMobileHeight80]
-               <> style cssNav) $ do
-      e <- elAttr "span" (respClasses [onMobileFloatRight, onDesktopDisplayNone]
-                    ) $ iFa' "fas fa-bars"
-      elAttr "span" (respClass onMobileFloatLeft) $ do
-        iFa "fas fa-home"
-        elAttr "span" (respClass onMobileDisplayNone) $ text "Home"
-      dynToggle <- toggle False (domEvent Click e)
-      pure $ bool none inline <$> dynToggle
+        navBorder
+      divNavBar = elAttr "div" ("class" =: unwords [ "row"
+                                                   , rcClass onMobileAtBottom
+                                                   ] <> style (do textAlign center
+                                                                  backgroundColor white
+                                                              ))
+  (eLogin, eRegister) <- divNavBar $ mdo
+    let navButtonAttrs = for displayNav $ \d ->
+             "class" =: unwords [ "col-2"
+                                , rcClass onMobileHeight80
+                                , rcClass onDesktopDisplayImportant
+                                ]
+          <> style (do cssNav
+                       display d
+                   )
+        spanNavBtn = fmap fst . elDynAttr' "span" navButtonAttrs
+    elLogin <- spanNavBtn $ text "Login"
+    elRegister <- spanNavBtn $ text "Register"
+
+    let spanNavBtnHome = fmap fst . elAttr' "span"
+          ("class" =: unwords [ "col-2"
+                              , rcClass onMobileWidthAuto
+                              , rcClass onDesktopBorder
+                              ])
+    elHome <- spanNavBtnHome $ do
+      iFa "fas fa-home"
+      elAttr "span" (respClass onMobileDisplayNone) $ text "Home"
+
+    let spanNavBars = elAttr "span" (respClasses [onDesktopDisplayNone]
+                                   <> style (do position absolute
+                                                right (px 0)
+                                                padding (px 0) (px 8) (px 0) (px 8)
+                                            ))
+    elBars <- spanNavBars $ iFa' "fas fa-bars"
+
+    let eLogin = domEvent Click elLogin
+        eRegister = domEvent Click elRegister
+    let eToggle = domEvent Click elBars
+        toggleFunc True  s = Just $ not s -- toggle btn always toggles
+        toggleFunc False True = Just False -- other btns only hide
+        toggleFunc False False = Nothing
+    dynToggle <- foldDynMaybe toggleFunc False $
+      leftmost [eToggle $> True, eLogin $> False, eRegister $> False]
+    let displayNav = bool none block <$> dynToggle
+    pure (eLogin, eRegister)
+
+  -- login and registration
+  let overlayAttrs = for displayOverlay $ \d ->
+        style (do position absolute
+                  top (pct 50)
+                  left (pct 50)
+                  transform (translate (pct -50) $ pct -50)
+                  display d
+                  )
+      divOverlay = elDynAttr "div" overlayAttrs
+    divOverlay $ do
+      elClose <- el' "span" $ iFa "fas fa-times"
 
 
-  btnLogin <- el "div" $ button "Login"
 
   let input conf label id = do
         elAttr "label" ("for" =: id) $ text label
@@ -289,7 +339,6 @@ htmlHead = do
     star # ("class" ^= "col-") ? do
       float floatRight
       padding (px 5) (px 5) (px 5) (px 5)
-      border solid (px 1) lightgray
       width (pct 100)
     desktopOnly $ do
       ".col-1"  ? width (pct 8.33)
@@ -318,6 +367,8 @@ htmlHead = do
       , onMobileAtBottom
       , onMobileHeight80
       , onDesktopDisplayImportant
+      , onMobileWidthAuto
+      , onDesktopBorder
       ]
 
 
