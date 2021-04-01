@@ -20,7 +20,7 @@ import           Reflex.Dom.Core           (InputElement (..), blank, button,
                                             el, elAttr,
                                             inputElementConfig_setValue, text)
 
-import           Clay                      (top, left, translate, transform, absolute, right, block, Auto(auto), important, Center (center), Color, Css,
+import           Clay                      (paddingBottom, Size, maxWidth, marginBottom, borderRadius, zIndex, top, left, translate, transform, absolute, right, block, Auto(auto), important, Center (center), Color, Css,
                                             None (none), Selector, after,
                                             backgroundColor, body, border,
                                             borderBox, both, bottom, boxSizing,
@@ -61,7 +61,7 @@ import           Data.Time                 (defaultTimeLocale, formatTime,
 import           Data.Tuple                (fst, snd)
 import           Data.Witherable           (mapMaybe)
 import           Obelisk.Route.Frontend    (RoutedT)
-import           Reflex.Dom                (foldDyn, Prerender(prerender), elAttr', el', foldDynMaybe, attachPromptlyDynWithMaybe, attachPromptlyDynWith, leftmost, elDynAttr', DomBuilder (DomBuilderSpace, inputElement),
+import           Reflex.Dom                (AttributeName, foldDyn, Prerender(prerender), elAttr', el', foldDynMaybe, attachPromptlyDynWithMaybe, attachPromptlyDynWith, leftmost, elDynAttr', DomBuilder (DomBuilderSpace, inputElement),
                                             Element, EventName (Click),
                                             EventResult, HasDomEvent (domEvent),
                                             MonadHold (holdDyn),
@@ -85,6 +85,9 @@ anthrazit = rgb 8 20 48 -- #081430;
 
 style :: Css -> Map Text Text
 style css = "style" =: Lazy.toStrict (renderWith htmlInline [] css)
+
+styleA :: Css -> Map AttributeName Text
+styleA css = "style" =: Lazy.toStrict (renderWith htmlInline [] css)
 
 elClassStyle :: DomBuilder t m => Text -> Text -> Css -> m a -> m a
 elClassStyle e class' css inner =
@@ -160,6 +163,31 @@ onMobileFontBig :: ResponsiveClass
 onMobileFontBig =
   mkResponsiveClass mobileOnly (fontSize $ pt 40) ".onMobileFontBig"
 
+onMobileMkOverlay :: ResponsiveClass
+onMobileMkOverlay =
+  mkResponsiveClass mobileOnly (do -- width $ pct 100
+                                   height $ pct 100
+                                   top $ px 0
+                                   important $ paddingBottom $ px 100
+                               ) ".onMobileMkOverlay"
+
+onDesktopMkOverlay :: ResponsiveClass
+onDesktopMkOverlay =
+  mkResponsiveClass desktopOnly
+    (do position absolute
+        top (pct 50)
+        left (pct 50)
+        transform (translate (pct $ -50) $ pct $ -50)
+    ) ".onDesktopMkOverlay"
+
+onMobileWidthFull :: ResponsiveClass
+onMobileWidthFull =
+  mkResponsiveClass mobileOnly (width $ pct 100) ".onMobileWidthFull"
+
+onDesktopMaxWidth370px :: ResponsiveClass
+onDesktopMaxWidth370px =
+  mkResponsiveClass desktopOnly (maxWidth $ px 370) ".onDesktopMaxWidth370px"
+
 classes :: [Text] -> Map Text Text
 classes ls = "class" =: unwords ls
 
@@ -173,12 +201,17 @@ navBorder :: Css
 navBorder = border solid (px 1) lightgray
 
 elLabelInput conf label id = do
-  elAttr "label" ("for" =: id) $ text label
-  el "br" blank
+  elAttr "label" ("for" =: id) $ el "h3" $ text label
+  let css = do
+        fontSize (pt 24)
+        padding (px 8) (px 8) (px 8) (px 8)
+        borderRadius (px 12) (px 12) (px 12) (px 12)
+        border solid (px 1) gray
+        marginBottom (px 12)
   i <- inputElement $ conf
          & inputElementConfig_elementConfig
-         . elementConfig_initialAttributes .~ ("id" =: id)
-  el "br" blank
+         . elementConfig_initialAttributes
+         .~ ("id" =: id <> styleA css <> "class" =: rcClass onMobileWidthFull)
   let str = _inputElement_value i
   pure $ fmap (\s -> if Text.null s then Nothing else Just s) str
 
@@ -193,12 +226,14 @@ htmlBody = do
         textAlign center
         backgroundColor white
         navBorder
-      divNavBar = elAttr "div" ("class" =: unwords [ "row"
-                                                   , rcClass onMobileAtBottom
-                                                   , rcClass onMobileFontBig
-                                                   ] <> style (do textAlign center
-                                                                  backgroundColor white
-                                                              ))
+      divNavBar = elAttr "div" ("class" =: unwords
+        [ "row"
+        , rcClass onMobileAtBottom
+        , rcClass onMobileFontBig
+        ] <> style (do textAlign center
+                       backgroundColor white
+                       zIndex 2
+                   ))
   (eLogin, eRegister) <- divNavBar $ mdo
     let navButtonAttrs = for displayNav $ \d ->
              "class" =: unwords [ "col-2"
@@ -207,6 +242,7 @@ htmlBody = do
                                 ]
           <> style (do cssNav
                        display d
+                       zIndex 2
                    )
         spanNavBtn = fmap fst . elDynAttr' "span" navButtonAttrs
     elLogin <- spanNavBtn $ text "Login"
@@ -242,23 +278,27 @@ htmlBody = do
   mdo
     -- registration / user new
     let overlayAttrs = for displayOverlay $ \d ->
-          style (do position absolute
-                    top (pct 50)
-                    left (pct 50)
-                    transform (translate (pct $ -50) $ pct $ -50)
+          respClasses [ onMobileMkOverlay
+                      , onDesktopMkOverlay
+                      ] <>
+          style (do backgroundColor white
+                    padding (px 24) (px 24) (px 24) (px 24)
+                    position absolute
+                    zIndex 1
                     display d
                     )
         divOverlay = elDynAttr "div" overlayAttrs
     (elClose, userName, password) <- divOverlay $ do
-      let spanClose = el' "span" $ iFa "fas fa-times"
+      let spanClose = elAttr' "span" (style $ float floatRight) $ iFa "fas fa-times"
+          divFieldDescription = elAttr "div" $ respClass onDesktopMaxWidth370px
       elClose <- fst <$> spanClose
-      userName <- elLabelInput def "User Name" "username"
-      el "span" $ text "Your user name is not publicly visible. You can choose \
-                       \your public alias in the next step."
+      userName <- elLabelInput def "Username" "username"
+      divFieldDescription $ text "Your user name is not publicly visible. You \
+                                 \can choose your public alias in the next step."
       password <- elLabelInput def "Password" "password"
-      el "span" $ text "You enter your password only once. There are no invalid \
-                       \passwords except for an empty one. Password reset via \
-                       \email can be optionally added later."
+      divFieldDescription $ text "You enter your password only once. There are \
+                                 \no invalid passwords except for an empty one.\
+                                 \ Password reset via email can be optionally added later."
       pure (elClose, userName, password)
     let eClose = domEvent Click elClose
     dynShowOverlay <- holdDyn False $ leftmost [eRegister $> True, eClose $> False]
@@ -388,6 +428,10 @@ htmlHead = do
       , onMobileWidthAuto
       , onDesktopBorder
       , onMobileFontBig
+      , onMobileMkOverlay
+      , onDesktopMkOverlay
+      , onMobileWidthFull
+      , onDesktopMaxWidth370px
       ]
 
 
