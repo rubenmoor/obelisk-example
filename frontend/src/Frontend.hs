@@ -49,7 +49,7 @@ import           Data.Bool                 (not, (&&), (||), bool, Bool(True, Fa
 import           Data.Default              (Default (def))
 import           Data.Either               (Either (..))
 import           Data.Foldable             (traverse_)
-import           Data.Function             (flip, ($), (&))
+import           Data.Function             (const, flip, ($), (&))
 import           Data.Functor              (void, Functor (fmap), ($>), (<$>))
 import           Data.Map                  (Map)
 import           Data.Maybe                (Maybe (..), fromMaybe, maybe)
@@ -61,7 +61,7 @@ import           Data.Time                 (defaultTimeLocale, formatTime,
 import           Data.Tuple                (fst, snd)
 import           Data.Witherable           (mapMaybe)
 import           Obelisk.Route.Frontend    (RoutedT)
-import           Reflex.Dom                (elAttr', el', foldDynMaybe, attachPromptlyDynWithMaybe, attachPromptlyDynWith, leftmost, elDynAttr', DomBuilder (DomBuilderSpace, inputElement),
+import           Reflex.Dom                (foldDyn, Prerender(prerender), elAttr', el', foldDynMaybe, attachPromptlyDynWithMaybe, attachPromptlyDynWith, leftmost, elDynAttr', DomBuilder (DomBuilderSpace, inputElement),
                                             Element, EventName (Click),
                                             EventResult, HasDomEvent (domEvent),
                                             MonadHold (holdDyn),
@@ -87,10 +87,10 @@ style :: Css -> Map Text Text
 style css = "style" =: Lazy.toStrict (renderWith htmlInline [] css)
 
 elClassStyle :: DomBuilder t m => Text -> Text -> Css -> m a -> m a
-elClassStyle el' class' css inner =
+elClassStyle e class' css inner =
   let attrs = "class" =: class'
            <> style css
-  in  elAttr el' attrs inner
+  in  elAttr e attrs inner
 
 iFa' :: DomBuilder t m => Text -> m (Element EventResult (DomBuilderSpace m) t)
 iFa' class' = fst <$> elClass' "i" class' blank
@@ -156,6 +156,10 @@ onDesktopBorder :: ResponsiveClass
 onDesktopBorder =
   mkResponsiveClass desktopOnly navBorder ".onDesktopBorder"
 
+onMobileFontBig :: ResponsiveClass
+onMobileFontBig =
+  mkResponsiveClass mobileOnly (fontSize $ pt 40) ".onMobileFontBig"
+
 classes :: [Text] -> Map Text Text
 classes ls = "class" =: unwords ls
 
@@ -167,6 +171,16 @@ respClass rc = "class" =: rcClass rc
 
 navBorder :: Css
 navBorder = border solid (px 1) lightgray
+
+elLabelInput conf label id = do
+  elAttr "label" ("for" =: id) $ text label
+  el "br" blank
+  i <- inputElement $ conf
+         & inputElementConfig_elementConfig
+         . elementConfig_initialAttributes .~ ("id" =: id)
+  el "br" blank
+  let str = _inputElement_value i
+  pure $ fmap (\s -> if Text.null s then Nothing else Just s) str
 
 htmlBody
   :: forall t js (m :: * -> *)
@@ -181,6 +195,7 @@ htmlBody = do
         navBorder
       divNavBar = elAttr "div" ("class" =: unwords [ "row"
                                                    , rcClass onMobileAtBottom
+                                                   , rcClass onMobileFontBig
                                                    ] <> style (do textAlign center
                                                                   backgroundColor white
                                                               ))
@@ -224,38 +239,40 @@ htmlBody = do
     let displayNav = bool none block <$> dynToggle
     pure (eLogin, eRegister)
 
-  -- login and registration
-  let overlayAttrs = for displayOverlay $ \d ->
-        style (do position absolute
-                  top (pct 50)
-                  left (pct 50)
-                  transform (translate (pct -50) $ pct -50)
-                  display d
-                  )
-      divOverlay = elDynAttr "div" overlayAttrs
-    divOverlay $ do
-      elClose <- el' "span" $ iFa "fas fa-times"
-
-
-
-  let input conf label id = do
-        elAttr "label" ("for" =: id) $ text label
-        el "br" blank
-        i <- inputElement $ conf
-               & inputElementConfig_elementConfig
-               . elementConfig_initialAttributes .~ ("id" =: id)
-        el "br" blank
-        let str = _inputElement_value i
-        pure $ fmap (\s -> if Text.null s then Nothing else Just s) str
+  mdo
+    -- registration / user new
+    let overlayAttrs = for displayOverlay $ \d ->
+          style (do position absolute
+                    top (pct 50)
+                    left (pct 50)
+                    transform (translate (pct $ -50) $ pct $ -50)
+                    display d
+                    )
+        divOverlay = elDynAttr "div" overlayAttrs
+    (elClose, userName, password) <- divOverlay $ do
+      let spanClose = el' "span" $ iFa "fas fa-times"
+      elClose <- fst <$> spanClose
+      userName <- elLabelInput def "User Name" "username"
+      el "span" $ text "Your user name is not publicly visible. You can choose \
+                       \your public alias in the next step."
+      password <- elLabelInput def "Password" "password"
+      el "span" $ text "You enter your password only once. There are no invalid \
+                       \passwords except for an empty one. Password reset via \
+                       \email can be optionally added later."
+      pure (elClose, userName, password)
+    let eClose = domEvent Click elClose
+    dynShowOverlay <- holdDyn False $ leftmost [eRegister $> True, eClose $> False]
+    let displayOverlay = bool none block <$> dynShowOverlay
+    blank
 
   el "h1" $ text "Create new episode"
   pb <- getPostBuild
   postBuildTime <- performEvent $ pb $> liftIO getCurrentTime
   let today = Text.pack . formatTime defaultTimeLocale "%F" <$> postBuildTime
-  date <- input (def & inputElementConfig_setValue .~ today
-                ) "Episode date: " "date"
-  customIndex <- input def "Custom index: " "customIndex"
-  title <- input def "Episode title: " "title"
+  date <- elLabelInput (def & inputElementConfig_setValue .~ today)
+                       "Episode date: " "date"
+  customIndex <- elLabelInput def "Custom index: " "customIndex"
+  title <- elLabelInput def "Episode title: " "title"
 
   text "Title: "
   el "br" blank
@@ -331,7 +348,8 @@ htmlHead = do
   el "style" $ text $ Lazy.toStrict $ renderWith compact [] $ do
     body ? do
       fontFamily ["Abel"] [sansSerif]
-      fontSize (pt 42)
+      -- fontSize (pt 42)
+      fontSize (pt 18)
       color anthrazit
       backgroundColor lightgray
       margin (px 0) (px 0) (px 0) (px 0)
@@ -369,6 +387,7 @@ htmlHead = do
       , onDesktopDisplayImportant
       , onMobileWidthAuto
       , onDesktopBorder
+      , onMobileFontBig
       ]
 
 
