@@ -30,7 +30,7 @@ import qualified Data.Text           as Text
 import qualified Data.Text.Lazy      as Lazy
 import           Data.Tuple          (fst)
 import           MediaQuery
-import           Reflex.Dom          (elAttr', EventName(Click), HasDomEvent(domEvent), AttributeName,
+import           Reflex.Dom          (ffor, elAttr', EventName(Click), HasDomEvent(domEvent), AttributeName,
                                       DomBuilder (DomBuilderSpace, inputElement),
                                       Element, EventResult, InputElement (..),
                                       InputElementConfig, Reflex(Event, Dynamic),
@@ -71,15 +71,16 @@ elLabelInput
   => InputElementConfig e t (DomBuilderSpace m)
   -> Text
   -> Text
-  -> m (Dynamic t (Maybe Text))
+  -> m (Dynamic t (Maybe Text), InputElement e (DomBuilderSpace m) t)
 elLabelInput conf label id = do
   elAttr "label" ("for" =: id) $ el "h3" $ text label
   i <- inputElement $ conf
          & inputElementConfig_elementConfig
          . elementConfig_initialAttributes
          .~ ("id" =: id <> "class" =: rcClass onMobileWidthFull)
-  let str = _inputElement_value i
-  pure $ fmap (\s -> if Text.null s then Nothing else Just s) str
+  let dynStr = _inputElement_value i
+      dynMStr = ffor dynStr $ \s -> if Text.null s then Nothing else Just s
+  pure (dynMStr, i)
 
 btnSend
   :: DomBuilder t m

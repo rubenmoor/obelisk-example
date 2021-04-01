@@ -57,7 +57,7 @@ type RoutesApi = "api" :>
   )
 
 type RouteGrantAuthPwd  = "login"  :> ReqBody '[JSON] LoginData :> Post '[JSON] (Maybe CompactJWT)
-type RouteUserNew       = "new"    :> ReqBody '[JSON] UserNew   :> Post '[JSON] (Maybe CompactJWT)
+type RouteUserNew       = "new"    :> ReqBody '[JSON] UserNew   :> Post '[JSON] CompactJWT
 type RouteDoesUserExist = "exists" :> ReqBody '[JSON] Text      :> Post '[JSON] Bool
 type RouteUserGet       = "get"    :> Get '[JSON] UserInfo
 

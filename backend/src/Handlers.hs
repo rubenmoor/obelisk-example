@@ -238,7 +238,7 @@ handleGrantAuthPwd LoginData{..} = do
       either toServerError (pure . Just) eJwt
     PasswordCheckFail    -> pure Nothing
 
-handleUserNew :: UserNew -> Handler (Maybe CompactJWT)
+handleUserNew :: UserNew -> Handler CompactJWT
 handleUserNew UserNew{..} = do
   when (Text.null unPassword) $
     throwError $ err400 { errBody = "Password cannot be empty" }
@@ -269,7 +269,7 @@ handleUserNew UserNew{..} = do
   jwk <- asks envJwk
   eJwt <- liftIO $ runExceptT $ mkCompactJWT jwk claims
   let toServerError e = throwError $ err500 { errBody = BSU.fromString $ show e}
-  either toServerError (pure . Just) eJwt
+  either toServerError pure eJwt
 
 handleDoesUserExist :: Text -> Handler Bool
 handleDoesUserExist str = runDb $ isJust <$> getBy (UUserName str)

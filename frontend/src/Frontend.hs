@@ -148,10 +148,10 @@ htmlBody = do
   pb <- getPostBuild
   postBuildTime <- performEvent $ pb $> liftIO getCurrentTime
   let today = Text.pack . formatTime defaultTimeLocale "%F" <$> postBuildTime
-  date <- elLabelInput (def & inputElementConfig_setValue .~ today)
+  (date, _) <- elLabelInput (def & inputElementConfig_setValue .~ today)
                        "Episode date: " "date"
-  customIndex <- elLabelInput def "Custom index: " "customIndex"
-  title <- elLabelInput def "Episode title: " "title"
+  (customIndex, _) <- elLabelInput def "Custom index: " "customIndex"
+  (title, _) <- elLabelInput def "Episode title: " "title"
 
   text "Title: "
   el "br" blank

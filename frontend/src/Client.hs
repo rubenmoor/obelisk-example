@@ -28,9 +28,9 @@ postAuthNew
   :: SupportsServantReflex t m
   => Dynamic t (Either Text UserNew)
   -> Event t ()
-  -> m (Event t (ReqResult () (Maybe CompactJWT)))
+  -> m (Event t (ReqResult () CompactJWT))
 
-postUserExists
+postDoesUserExist
   :: SupportsServantReflex t m
   => Dynamic t (Either Text Text)
   -> Event t ()
@@ -57,7 +57,7 @@ postAliasRename
   -> Event t ()
   -> m (Event t (ReqResult () ()))
 
-((postAuthenticate :<|> postAuthNew :<|> postUserExists :<|> postAuthUserGet)
+((postAuthenticate :<|> postAuthNew :<|> postDoesUserExist :<|> postAuthUserGet)
    :<|> (postEpisodeNew)
    :<|> postAliasRename
  ) =
