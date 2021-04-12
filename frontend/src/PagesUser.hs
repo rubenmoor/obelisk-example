@@ -24,9 +24,9 @@ import           Data.Bool              (Bool (..), not)
 import           Data.Either            (Either (..))
 import           Data.Function          (($))
 import           Data.Functor           (void, ($>), (<$>))
-import           Data.Maybe             (Maybe (Just), maybe)
+import           Data.Maybe             (Maybe(Nothing, Just), maybe)
 import           Data.Semigroup         (Semigroup ((<>)))
-import           Data.Witherable        (Filterable (mapMaybe),
+import           Data.Witherable        (Filterable(catMaybes, mapMaybe),
                                          filter)
 import           MediaQuery             (onDesktopMaxWidth370px,
                                          onDesktopMkOverlay, onMobileMkOverlay,
@@ -124,12 +124,17 @@ pageLogin =
   divOverlay $ mdo
     (userName, _) <- elLabelInput def "Username" "username"
     (password, _) <- elLabelInput def "Password" "password"
+    widgetHold_ blank $ ffor success $ \case
+      Just _ -> blank
+      Nothing -> elAttr "span" (style $ color red) $ text "wrong password"
     eSend <- btnSend $ text "Login"
     let eLoginData = ffor (zipDyn userName password) $ \case
           (Just u, Just p) -> Right $ LoginData u p
           _                -> Left "all fields are required"
-    eSession <- mapMaybe reqSuccess <$>
-      request (postAuthenticate eLoginData eSend)
-    tellEvent $ ffor eSession $ \session -> EStateUpdate (\s -> s { stSession = SessionAnon })
+    response <- request (postAuthenticate eLoginData eSend)
+    let success = mapMaybe reqSuccess response
+        loggedIn = catMaybes success
+    tellEvent $ ffor loggedIn $ \(jwt, ui) ->
+      EStateUpdate (\s -> s { stSession = SessionUser jwt ui })
     -- TODO: store current route in route /register/ to allow going back
-    setRoute $ eSession $> FrontendRoute_Main :/ ()
+    setRoute $ loggedIn $> FrontendRoute_Main :/ ()
