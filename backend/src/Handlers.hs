@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds            #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE LambdaCase           #-}
 {-# LANGUAGE LiberalTypeSynonyms  #-}
@@ -42,6 +43,7 @@ import           Data.Functor
 import           Data.Int                  (Int)
 import           Data.List                 (map, null, sortOn)
 import qualified Data.Map                  as Map
+import Data.Map (Map)
 import           Data.Maybe                (Maybe (Just, Nothing), isJust,
                                             maybe)
 import           Data.Monoid               ((<>))
@@ -63,7 +65,7 @@ import           Database.Gerippe          (join1ToMWhere', join1ToM', Entity (.
                                             PersistentSqlException, from,
                                             getAll, getWhere, joinMTo1Where',
                                             on, select, val, where_, (&&.),
-                                            (==.), (^.))
+                                            (==.), (^.), get, Key)
 import           Database.Persist.MySQL    ((=.), PersistStoreWrite(update), SqlBackend, runSqlPool)
 import           Model                     (Rank(RankModerator), Alias (..), AuthPwd (..),
                                             Clearance (..), EntityField (..),
@@ -86,6 +88,16 @@ import           Text.Show                 (Show (show))
 
 default(Text)
 
+getClearances :: Key Alias -> Handler (Map Text Rank)
+getClearances keyAlias = do
+  clearances <- runDb $
+    joinMTo1Where' ClearanceFkPodcast PodcastId
+                   ClearanceFkAlias keyAlias
+  let for = flip fmap
+  pure $ Map.fromList $ for clearances $
+    \(Entity _ Clearance{..}, Entity _ Podcast{..}) ->
+      (podcastIdentifier, clearanceRank)
+
 mkContext :: JWK -> Pool SqlBackend -> Context '[Snap UserInfo]
 mkContext jwk pool =
   let authHandler :: Snap UserInfo
@@ -106,7 +118,7 @@ mkContext jwk pool =
         (Entity _ User{..}, Entity uiKeyAlias uiAlias) <- case ls of
           [entry] -> pure entry
           _       -> toServerError ("user/alias not found" :: String)
-        let uiIsSiteAdmin = userIsSiteAmdin
+        let uiIsSiteAdmin = userIsSiteAdmin
         clearances <- runDb' pool $
           joinMTo1Where' ClearanceFkPodcast PodcastId
                          ClearanceFkAlias uiKeyAlias
@@ -122,7 +134,6 @@ handlers =
   :<|>  (handleGrantAuthPwd
     :<|> handleUserNew
     :<|> handleDoesUserExist
-    :<|> handleUserGet
         )
   :<|> handleEpisodeNew
   :<|> handleAliasRename
@@ -204,50 +215,57 @@ data EpisodeFeedData = EpisodeFeedData
     }
 
 
-handleGrantAuthPwd :: LoginData -> Handler (Maybe CompactJWT)
+handleGrantAuthPwd :: LoginData -> Handler (Maybe (CompactJWT, UserInfo))
 handleGrantAuthPwd LoginData{..} = do
   mUser <- runDb (getBy $ UUserName ldUserName)
-  Entity keyUser user <- maybe
+  Entity keyUser User{..} <- maybe
     (throwError $ err400 { errBody = "user does not exist" })
     pure mUser
   mAuth <- runDb (getBy $ UAuthPwdFkUser keyUser)
   Entity _ AuthPwd{..} <- maybe
     (throwError $ err400 { errBody = "not registered with password"})
     pure mAuth
-  mAlias <- runDb $ getBy $ UAliasName ldAliasName
-  keyAlias <- case mAlias of
-    Just (Entity key Alias{..}) -> do
-      unless (aliasFkUser == keyUser) $ throwError $ err400 { errBody = "wrong alias" }
-      pure key
-    Nothing -> throwError $ err400 { errBody = "alias does not exist" }
+  Entity uiKeyAlias uiAlias <- case userFkDefaultAlias of
+    Just key -> runDb (get key) >>= \case
+      Just alias -> pure $ Entity key alias
+      Nothing    -> throwError $ err500 { errBody = "alias not found" }
+    Nothing  -> runDb (getWhere AliasFkUser keyUser) >>= \case
+      [alias] -> pure alias
+      _       -> throwError $ err500 { errBody = "alias not found" }
   case checkPassword (mkPassword ldPassword) authPwdPassword of
     PasswordCheckSuccess -> do
       now <- liftIO getCurrentTime
       runDb $ insert_ $
-        let journalFkAlias = Just keyAlias
+        let journalFkAlias = Just uiKeyAlias
             journalCreated = now
             journalEvent = EventLogin
             journalDescription = ""
             journalSubject = SubjectUser
-            journalFkEventSource = userFkEventSource user
+            journalFkEventSource = userFkEventSource
         in  Journal{..}
-      let claims = mkClaims now (mkSub ldUserName ldAliasName)
+      let claims = mkClaims now (mkSub ldUserName $ aliasName uiAlias)
       jwk <- asks envJwk
       eJwt <- liftIO $ runExceptT $ mkCompactJWT jwk claims
+      uiClearances <- getClearances uiKeyAlias
+      let uiIsSiteAdmin = userIsSiteAdmin
+          uiUserName = userName
+      let ui = UserInfo{..}
       let toServerError e = throwError $ err500 { errBody = BSU.fromString $ show e}
-      either toServerError (pure . Just) eJwt
+      either toServerError (\jwt -> pure $ Just (jwt, ui)) eJwt
     PasswordCheckFail    -> pure Nothing
 
-handleUserNew :: UserNew -> Handler CompactJWT
+handleUserNew :: UserNew -> Handler (CompactJWT, UserInfo)
 handleUserNew UserNew{..} = do
   when (Text.null unPassword) $
     throwError $ err400 { errBody = "Password cannot be empty" }
-  isFirst <- runDb $ (null :: [Entity User] -> Bool) <$> getAll
+  uiIsSiteAdmin <- runDb $ (null :: [Entity User] -> Bool) <$> getAll
   eventSourceId <- runDb $ insert EventSource
-  user <- runDb $ insert $ User unUserName isFirst eventSourceId
+  user <- runDb $ insert $ User unUserName uiIsSiteAdmin eventSourceId Nothing
   password <- hashPassword (mkPassword unPassword)
   runDb $ insert_ $ AuthPwd user password
-  runDb $ insert_ $ Alias unUserName user
+  let uiAlias = Alias unUserName user
+  uiKeyAlias <- runDb $ insert uiAlias
+  runDb $ update user [ UserFkDefaultAlias =. Just uiKeyAlias ]
   now <- liftIO getCurrentTime
   runDb $ insert_ $
     let journalFkAlias = Nothing
@@ -268,14 +286,14 @@ handleUserNew UserNew{..} = do
   let claims = mkClaims now (mkSub unUserName unUserName)
   jwk <- asks envJwk
   eJwt <- liftIO $ runExceptT $ mkCompactJWT jwk claims
+  uiClearances <- getClearances uiKeyAlias
+  let uiUserName = unUserName
+  let ui = UserInfo{..}
   let toServerError e = throwError $ err500 { errBody = BSU.fromString $ show e}
-  either toServerError pure eJwt
+  either toServerError (pure . (, ui)) eJwt
 
 handleDoesUserExist :: Text -> Handler Bool
 handleDoesUserExist str = runDb $ isJust <$> getBy (UUserName str)
-
-handleUserGet :: UserInfo -> Handler UserInfo
-handleUserGet = pure
 
 checkClearance :: UserInfo -> Text -> Rank -> Handler ()
 checkClearance UserInfo{..} theShow minRank =

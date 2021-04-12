@@ -13,34 +13,36 @@ import           Data.Data      (Proxy (..))
 import           Data.Either    (Either)
 import           Data.Maybe     (Maybe)
 import           Data.Text      (Text)
-import           Reflex.Dom     (Reflex (Dynamic, Event), constDyn)
+import           Reflex.Dom     (switchDyn, Prerender(Client, prerender),  Reflex(never, Dynamic, Event), constDyn)
 import           Servant.API    ((:<|>) (..))
 import           Servant.Reflex (BaseUrl (..), ReqResult, SupportsServantReflex,
                                  client)
+import Control.Applicative (Applicative(pure), (<$>))
+import Control.Monad (Monad)
+
+request
+  :: (Prerender js t m, Monad m)
+  => Client m (Event t (ReqResult () a))
+  -> m (Event t (ReqResult () a))
+request r = switchDyn <$> prerender (pure never) r
 
 postAuthenticate
   :: SupportsServantReflex t m
   => Dynamic t (Either Text LoginData)
   -> Event t ()
-  -> m (Event t (ReqResult () (Maybe CompactJWT)))
+  -> m (Event t (ReqResult () (Maybe (CompactJWT, UserInfo))))
 
 postAuthNew
   :: SupportsServantReflex t m
   => Dynamic t (Either Text UserNew)
   -> Event t ()
-  -> m (Event t (ReqResult () CompactJWT))
+  -> m (Event t (ReqResult () (CompactJWT, UserInfo)))
 
 postDoesUserExist
   :: SupportsServantReflex t m
   => Dynamic t (Either Text Text)
   -> Event t ()
   -> m (Event t (ReqResult () Bool))
-
-postAuthUserGet
-  :: SupportsServantReflex t m
-  => Dynamic t (Either Text CompactJWT) -- compactJWT
-  -> Event t ()
-  -> m (Event t (ReqResult () UserInfo))
 
 postEpisodeNew
   :: SupportsServantReflex t m
@@ -57,7 +59,7 @@ postAliasRename
   -> Event t ()
   -> m (Event t (ReqResult () ()))
 
-((postAuthenticate :<|> postAuthNew :<|> postDoesUserExist :<|> postAuthUserGet)
+((postAuthenticate :<|> postAuthNew :<|> postDoesUserExist)
    :<|> (postEpisodeNew)
    :<|> postAliasRename
  ) =

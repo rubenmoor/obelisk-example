@@ -31,7 +31,9 @@ import           Data.Text               (Text)
 import qualified Data.Text               as Text
 import qualified Data.Text.Encoding      as Text
 import           Data.Typeable           (Typeable)
+import           Database.Gerippe        (PersistEntity (Key))
 import           GHC.Generics            (Generic)
+import           Model                   (Alias, Rank)
 import           Reflex.Dom              (Reflex (Dynamic))
 import           Servant                 (HasContextEntry (getContextEntry))
 import           Servant.API             ((:>))
@@ -43,8 +45,6 @@ import           Snap.Core               (Request, Snap)
 import           Snap.Internal.Core      (evalSnap)
 import           Web.HttpApiData         (FromHttpApiData (..),
                                           ToHttpApiData (..))
-import Model (Alias, Rank)
-import Database.Gerippe (PersistEntity(Key))
 
 newtype CompactJWT = CompactJWT
   { unCompactJWT :: Text
@@ -63,14 +63,13 @@ instance (ToHttpApiData CompactJWT) where
 data LoginData = LoginData
   { ldUserName :: Text
   , ldPassword :: Text
-  , ldAliasName :: Text
   } deriving (Eq, Show, Generic)
 
 instance FromJSON LoginData
 instance ToJSON LoginData
 
 data UserNew = UserNew
-  { unUserName     :: Text
+  { unUserName :: Text
   , unPassword :: Text
   } deriving (Eq, Show, Generic)
 

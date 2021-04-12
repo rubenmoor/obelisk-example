@@ -62,5 +62,11 @@ in
       password-instances = self.callCabal2nix "password-instances"
         (password-repo + /password-instances) {};
       clay = self.callHackage "clay" "0.13.3" {};
+      # reflex-dom-storage = pkgs.fetchFromGitHub {
+      #   owner = "qfpl";
+      #   repo = "reflex-dom-storage";
+      #   rev = "2ffa13a48740681993dead6a10830c23d251d3a4";
+      #   sha256 = "0dxqxm9lh30hn73zfbgyb81f40697fiq89kkk2igncjg9mdb1096";
+      # };
     };
   })

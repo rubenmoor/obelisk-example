@@ -42,8 +42,9 @@ data BackendRoute :: * -> * where
   -- i.e. These do not serve the frontend, but do something different, such as serving static files.
 
 data FrontendRoute :: * -> * where
-  FrontendRoute_Main :: FrontendRoute ()
+  FrontendRoute_Main     :: FrontendRoute ()
   FrontendRoute_Register :: FrontendRoute ()
+  FrontendRoute_Login    :: FrontendRoute ()
 
 fullRouteEncoder
   :: Encoder (Either Text) Identity (R (FullRoute BackendRoute FrontendRoute)) PageName
@@ -57,6 +58,7 @@ fullRouteEncoder = mkFullRouteEncoder
   (\case
       FrontendRoute_Main -> PathEnd $ unitEncoder mempty
       FrontendRoute_Register -> PathSegment "register" $ unitEncoder mempty
+      FrontendRoute_Login -> PathSegment "login" $ unitEncoder mempty
   )
 
 concat <$> mapM deriveRouteComponent

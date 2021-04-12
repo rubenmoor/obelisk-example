@@ -48,7 +48,6 @@ type RoutesApi = "api" :>
     (      RouteGrantAuthPwd
       :<|> RouteUserNew
       :<|> RouteDoesUserExist
-      :<|> AuthProtect "jwt" :> RouteUserGet
     )
    :<|> "epsiode" :> Capture "podcast_id" Text :>
     ( AuthProtect "jwt" :> RouteEpisodeNew
@@ -56,10 +55,9 @@ type RoutesApi = "api" :>
    :<|> AuthProtect "jwt" :> "alias" :> "rename" :> ReqBody '[JSON] Text :> Post '[JSON] ()
   )
 
-type RouteGrantAuthPwd  = "login"  :> ReqBody '[JSON] LoginData :> Post '[JSON] (Maybe CompactJWT)
-type RouteUserNew       = "new"    :> ReqBody '[JSON] UserNew   :> Post '[JSON] CompactJWT
+type RouteGrantAuthPwd  = "login"  :> ReqBody '[JSON] LoginData :> Post '[JSON] (Maybe (CompactJWT, UserInfo))
+type RouteUserNew       = "new"    :> ReqBody '[JSON] UserNew   :> Post '[JSON] (CompactJWT, UserInfo)
 type RouteDoesUserExist = "exists" :> ReqBody '[JSON] Text      :> Post '[JSON] Bool
-type RouteUserGet       = "get"    :> Get '[JSON] UserInfo
 
 -- episode
 

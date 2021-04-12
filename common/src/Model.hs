@@ -71,8 +71,9 @@ Episode
 User                             -- some real person
   name             Text
   UUserName name
-  isSiteAmdin      Bool
+  isSiteAdmin      Bool
   fkEventSource    EventSourceId
+  fkDefaultAlias   AliasId Maybe
 Alias                            -- one of several identities
   name             Text
   fkUser           UserId
