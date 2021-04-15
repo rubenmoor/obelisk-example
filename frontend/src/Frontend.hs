@@ -31,7 +31,7 @@ import qualified Data.Aeson                  as Aeson
 import           Data.Bool                   (Bool (False, True), bool, not)
 import           Data.Default                (Default (def))
 import           Data.Function               (const, ($))
-import           Data.Functor                (void, Functor (fmap), ($>), (<$>))
+import           Data.Functor                (Functor (fmap), void, ($>), (<$>))
 import           Data.Maybe                  (Maybe (..), fromMaybe, maybe)
 import           Data.Monoid                 ((<>))
 import           Data.Text                   (Text, unwords)
@@ -54,8 +54,9 @@ import           MediaQuery                  (ResponsiveClass (rcClass),
                                               respClasses)
 import           Obelisk.Route.Frontend      (RoutedT, mapRoutedT, routeLink,
                                               subRoute_)
-import           PagesUser                   (pageLogin, pageRegister, pageSelectAlias)
-import           Reflex.Dom                  (tailE, widgetHold_, prerender_, DomBuilder (inputElement),
+import           PagesUser                   (pageAliasRename, pageLogin,
+                                              pageRegister, pageAliasSelect)
+import           Reflex.Dom                  (DomBuilder (inputElement),
                                               EventName (Click),
                                               HasDomEvent (domEvent),
                                               PerformEvent (..),
@@ -63,13 +64,15 @@ import           Reflex.Dom                  (tailE, widgetHold_, prerender_, Do
                                               Reflex (never, updated), dyn,
                                               dyn_, elAttr', elDynAttr', ffor,
                                               foldDyn, foldDynMaybe, leftmost,
-                                              runEventWriterT, switchHold, (.~),
-                                              (=:))
+                                              prerender_, runEventWriterT,
+                                              switchHold, tailE, widgetHold_,
+                                              (.~), (=:))
 import           Route                       (FrontendRoute (..))
 import           Shared                      (cssGeneral, iFa, iFa', navBorder,
                                               style)
 import           State                       (EStateUpdate (..), Session (..),
                                               State (..))
+import Reflex.Dom (EventWriter(tellEvent))
 
 pageHome
   :: forall t (m :: * -> *)
@@ -110,7 +113,9 @@ navigation dynSession = do
         pure $ leftmost $ domEvent Click <$> [elLogin, elRegister]
       SessionUser _ _ -> do
         elLogout <- spanNavBtn $ text "Logout"
-        pure $ domEvent Click elLogout
+        let eLogout = domEvent Click elLogout
+        tellEvent $ eLogout $> EStateUpdate (\s -> s { stSession = SessionAnon })
+        pure eLogout
     eExit <- switchHold never eBtns
 
     let spanNavBtnHome = fmap fst . elAttr' "span"
@@ -172,13 +177,14 @@ htmlBody = mdo
     let str = Lazy.toStrict $ Lazy.decodeUtf8 $ Aeson.encode st
     liftJSM (currentWindowUnchecked >>= getLocalStorage >>= setState str)
 
-  navigation $ stSession <$> dynState
-  (_, eStateUpdate) <- mapRoutedT runEventWriterT $
+  (_, eStateUpdate) <- mapRoutedT runEventWriterT $ do
+    navigation $ stSession <$> dynState
     subRoute_ $ \case
       FrontendRoute_Main        -> pageHome
       FrontendRoute_Register    -> pageRegister
       FrontendRoute_Login       -> pageLogin
-      FrontendRoute_SelectAlias -> pageSelectAlias $ stSession <$> dynState
+      FrontendRoute_AliasSelect -> pageAliasSelect $ stSession <$> dynState
+      FrontendRoute_AliasRename -> pageAliasRename $ stSession <$> dynState
   blank
   where
     loadingScreen =

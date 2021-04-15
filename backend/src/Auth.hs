@@ -45,7 +45,9 @@ mkClaims now sub = emptyClaimsSet
 
 mkCompactJWT
   :: (MonadRandom m, MonadError JWTError m)
-  => JWK -> ClaimsSet -> m CompactJWT
+  => JWK
+  -> ClaimsSet
+  -> m CompactJWT
 mkCompactJWT jwk claims = do
   alg <- bestJWSAlg jwk
   signed <- signClaims jwk (newJWSHeader ((), alg)) claims
@@ -53,7 +55,9 @@ mkCompactJWT jwk claims = do
 
 verifyCompactJWT
   :: (MonadError JWTError m, MonadTime m)
-  => JWK -> CompactJWT -> m Text
+  => JWK
+  -> CompactJWT
+  -> m Text
 verifyCompactJWT jwk (CompactJWT str)  = do
   jwt <- decodeCompact $ BL.fromStrict $ Text.encodeUtf8 str
   let config = defaultJWTValidationSettings (== audience)

@@ -101,18 +101,21 @@ mkContext :: JWK -> Pool SqlBackend -> Context '[Snap UserInfo]
 mkContext jwk pool =
   let authHandler :: Snap UserInfo
       authHandler = do
-        let toServerError e = throwError $ err500 { errBody = BSU.fromString $ show e}
+        let toServerError e = throwError $ err500 { errBody = BSU.fromString e}
             for = flip fmap
         mAuth <- getHeader "Authorization" <$> getRequest
-        auth <- maybe (toServerError ("authorization header missing" :: String))
+        auth <- maybe (toServerError "authorization header missing")
                 pure mAuth
         mAlias <- getHeader "X-Alias" <$> getRequest
-        aliasBs <- maybe (toServerError ("X-Alias header missing" :: String))
+        aliasBs <- maybe (toServerError "X-Alias header missing")
                    pure mAlias
-        uiAliasName <- either toServerError pure $ parseHeader aliasBs
-        jwt <- either toServerError pure $ parseHeader auth
+        uiAliasName <- either (\s -> toServerError $ "parseHeader alias: " <> show s)
+                       pure $ parseHeader aliasBs
+        jwt <- either (\s -> toServerError $ "parseHeader jwt: " <> show s)
+               pure $ parseHeader auth
         eSub <- liftIO $ runExceptT $ verifyCompactJWT jwk jwt
-        uiUserName <- either toServerError pure eSub
+        uiUserName <- either (\s -> toServerError $ "verify jwt: " <> show s)
+                      pure eSub
         ls <- runDb' pool $ select . from $ \(a `InnerJoin` u) -> do
           on     $ a ^. AliasFkUser ==. u ^. UserId
           where_ $ u ^. UserName ==. val uiUserName
@@ -153,7 +156,7 @@ runDb' :: Pool SqlBackend -> DbAction a -> Snap a
 runDb' pool action =
   catch (liftIO $ runSqlPool action pool >>= evaluate) $
     \(e :: PersistentSqlException) ->
-      throwError $ err500 { errBody = BSU.fromString $ show e }
+      throwError $ err500 { errBody = BSU.fromString $ "db error: " <> show e }
 
 handleFeedXML :: Text -> Handler Lazy.ByteString
 handleFeedXML podcastId = do

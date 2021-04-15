@@ -10,49 +10,68 @@
 module PagesUser
   ( pageRegister
   , pageLogin
-  , pageSelectAlias
+  , pageAliasSelect
+  , pageAliasRename
   ) where
 
-import           Clay                   (em, width, lightgrey, solid, border, absolute, backgroundColor, color,
-                                         float, floatRight, padding, position,
-                                         px, red, white, zIndex)
-import           Client                 (postAliasSetDefault, getAliasAll, postAuthenticate, postAuthNew,
-                                         postDoesUserExist, request)
-import           Common.Auth            (CompactJWT, UserInfo, UserInfo(uiAlias), LoginData (..), UserNew (..))
-import           Control.Category       (Category((.), id))
+import           Clay                   (absolute, backgroundColor, border,
+                                         color, em, float, floatRight,
+                                         lightgrey, padding, position, px, red,
+                                         solid, white, width, zIndex)
+import           Client                 (getAliasAll, postAliasRename,
+                                         postAliasSetDefault, postAuthNew,
+                                         postAuthenticate, postDoesUserExist,
+                                         request)
+import           Common.Auth            (CompactJWT, LoginData (..),
+                                         UserInfo (uiAlias), UserNew (..))
+import           Control.Applicative    (Applicative (pure))
+import           Control.Category       (Category (id, (.)))
+import           Control.Monad          (Monad)
 import           Control.Monad.Fix      (MonadFix)
 import           Data.Bool              (Bool (..), not)
-import           Data.Either            (Either (..))
-import           Data.Function          (const, (&), ($))
-import           Data.Functor           (Functor(fmap), void, ($>), (<$>))
-import           Data.Maybe             (Maybe(Nothing, Just), maybe)
+import           Data.Either            (Either (..), either)
+import           Data.Foldable          (forM_, traverse_)
+import           Data.Function          (const, ($), (&))
+import           Data.Functor           (Functor (fmap), void, ($>), (<$>))
+import           Data.List              (null)
+import           Data.Maybe             (Maybe (Just, Nothing), maybe)
 import           Data.Semigroup         (Semigroup ((<>)))
-import           Data.Witherable        (Filterable(catMaybes, mapMaybe),
+import           Data.Text              (Text)
+import           Data.Traversable       (forM)
+import           Data.Tuple             (fst, snd)
+import           Data.Witherable        (Filterable (catMaybes, mapMaybe),
                                          filter)
 import           MediaQuery             (onDesktopMaxWidth370px,
                                          onDesktopMkOverlay, onMobileMkOverlay,
                                          respClass, respClasses)
+import           Model                  (Alias (aliasName))
 import           Obelisk.Route          (pattern (:/), R)
 import           Obelisk.Route.Frontend (RouteToUrl, SetRoute (..), routeLink)
-import           Reflex.Dom             (switchHold, dyn, attachWith, inputElementConfig_setChecked, inputElementConfig_initialChecked, inputElementConfig_initialValue, elementConfig_initialAttributes, (.~), (=:), inputElementConfig_elementConfig, checkbox, el', leftmost, constDyn, prerender_, EventName(Click), HasDomEvent(domEvent), elAttr', el, DomBuilder(inputElement),  EventWriter (tellEvent),
-                                         InputElement (..), MonadHold (holdDyn),
-                                         PostBuild(getPostBuild),  Prerender (prerender),
-                                         Reflex(never, current, Dynamic, updated), blank, def, elAttr,
-                                         ffor, text, widgetHold_,
-                                         zipDyn)
-import           Route                  (FrontendRoute(FrontendRoute_SelectAlias, FrontendRoute_Main))
+import           Reflex.Dom             (DomBuilder (inputElement),
+                                         EventName (Click),
+                                         EventWriter (tellEvent),
+                                         HasDomEvent (domEvent),
+                                         InputElement (..), Key (Enter),
+                                         MonadHold (holdDyn),
+                                         PostBuild (getPostBuild),
+                                         Prerender (prerender),
+                                         Reflex (Dynamic, current, never, updated),
+                                         attachWith, blank, button, checkbox,
+                                         constDyn, def, dyn, dyn_, el, el',
+                                         elAttr, elAttr',
+                                         elementConfig_initialAttributes, ffor,
+                                         inputElementConfig_elementConfig,
+                                         inputElementConfig_initialChecked,
+                                         inputElementConfig_initialValue,
+                                         inputElementConfig_setChecked,
+                                         keypress, leftmost, prerender_,
+                                         switchHold, text, widgetHold_, zipDyn,
+                                         (.~), (=:))
+import           Route                  (FrontendRoute (..))
 import           Servant.Common.Req     (reqFailure, reqSuccess)
 import           Shared                 (btnSend, elLabelInput, iFa, style)
 import           State                  (EStateUpdate (..), Session (..),
                                          State (..))
-import Data.Tuple (snd, fst)
-import Model (Alias(aliasName))
-import Data.List (null)
-import Data.Text (Text)
-import Data.Foldable (forM_, traverse_)
-import Control.Monad (Monad)
-import Data.Traversable (forM)
-import Control.Applicative (Applicative(pure))
 
 divOverlay
   :: forall t js (m :: * -> *) a.
@@ -115,7 +134,7 @@ pageRegister =
     tellEvent $ ffor success $ \(jwt, ui) ->
       EStateUpdate (\s -> s { stSession = SessionUser jwt ui })
     -- TODO: store current route in route /register/ to allow going back
-    setRoute $ success $> FrontendRoute_Main :/ ()
+    setRoute $ success $> FrontendRoute_AliasRename :/ ()
 
 pageLogin
   :: forall t js (m :: * -> *).
@@ -151,10 +170,10 @@ pageLogin =
     -- TODO: store current route in route /register/ to allow going back
     setRoute $ ffor respAliases $ \ls ->
       if null ls then FrontendRoute_Main :/ ()
-                 else FrontendRoute_SelectAlias :/ ()
+                 else FrontendRoute_AliasSelect :/ ()
 
 getESession :: Session -> Either Text (CompactJWT, UserInfo)
-getESession SessionAnon = Left "not logged in"
+getESession SessionAnon          = Left "not logged in"
 getESession (SessionUser jwt ui) = Right (jwt, ui)
 
 getEJwt :: Session -> Either Text CompactJWT
@@ -163,7 +182,7 @@ getEJwt = fmap fst . getESession
 getEAlias  :: Session -> Either Text Text
 getEAlias = fmap (aliasName . uiAlias . snd) . getESession
 
-pageSelectAlias
+pageAliasSelect
   :: forall js t (m :: * -> *).
   ( DomBuilder t m
   , MonadFix m
@@ -174,11 +193,10 @@ pageSelectAlias
   , RouteToUrl (R FrontendRoute) m
   , SetRoute t (R FrontendRoute) m
   ) => Dynamic t Session -> m ()
-pageSelectAlias dynSession = do
+pageAliasSelect dynSession = do
   pb <- getPostBuild
   let dynEJwt = getEJwt <$> dynSession
       dynEAlias = getEAlias <$> dynSession
-      -- loading ::
       loading = do
         iFa "fas fa-spinner fa-spin"
         text " Loading ..."
@@ -211,20 +229,26 @@ pageSelectAlias dynSession = do
         pure $ _inputElement_checked cb
       let eClickCB = attachWith (const . not) (current dynCbChecked) $ domEvent Click elCb
       setRoute $ leftmost es $> FrontendRoute_Main :/ ()
-      -- es <- forM as $ \alias -> do
-      --   (el, _) <- elAttr' "div" css $ text alias
-      --   let eClick = domEvent Click el
-      --       dynAlias = constDyn $ const alias
-      --   eResp <- request (postAliasSetDefault dynEJwt dynEAlias dynAlias)
-      --   let eSuccess = mapMaybe reqSuccess eResp
-      --   pure eSuccess
-      -- setRoute $ leftmost es $> FrontendRoute_Main :/ ()
-    -- widgetHold_ loading $ ffor eAliases $ \as -> do
-    --   es <- forM as $ \alias -> do
-    --     (el, _) <- elAttr' "div" css $ text alias
-    --     let eClick = domEvent Click el
-    --         dynAlias = constDyn $ const alias
-    --     eResp <- request (postAliasSetDefault dynEJwt dynEAlias dynAlias)
-    --     let eSuccess = mapMaybe reqSuccess eResp
-    --     pure eSuccess
-    --   setRoute $ leftmost es $> FrontendRoute_Main :/ ()
+
+pageAliasRename
+  :: forall js t (m :: * -> *).
+  ( DomBuilder t m
+  , PostBuild t m
+  , Prerender js t m
+  , RouteToUrl (R FrontendRoute) m
+  , SetRoute t (R FrontendRoute) m
+  ) => Dynamic t Session -> m ()
+pageAliasRename dynSession = do
+  let dynEJwt = getEJwt <$> dynSession
+      dynEAlias = getEAlias <$> dynSession
+  divOverlay $
+    dyn_ $ ffor dynEAlias $ either text $ \alias -> do
+      let conf = def
+            & inputElementConfig_initialValue .~ alias
+      (mNew, i) <- elLabelInput conf "Choose an alias" "newalias"
+      eSend <- btnSend $ text "send"
+      let eEnter = keypress Enter i
+          eNew = maybe (Left "alias cannot be empty") Right <$> mNew
+      resp <- request (postAliasRename dynEJwt dynEAlias eNew $ leftmost [eSend, eEnter])
+      let success = mapMaybe reqSuccess resp
+      setRoute $ success $> FrontendRoute_Main :/ ()
