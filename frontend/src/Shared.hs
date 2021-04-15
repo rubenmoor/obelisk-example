@@ -1,26 +1,31 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecursiveDo       #-}
 
 module Shared where
 
-import           Clay                (visited, a, marginTop, em, button, white, bold, fontWeight, Color, Css, None (none), after,
-                                      backgroundColor, body, border, borderBox,
-                                      borderRadius, both, boxShadow, boxSizing,
-                                      bsColor, clear, color, content, display,
-                                      displayTable, easeInOut, float,
-                                      floatRight, focus, fontFamily, fontSize,
-                                      gray, input, lightgray, margin,
-                                      marginBottom, outline, padding, pct, pt,
-                                      px, renderWith, rgb, sansSerif, sec,
+import           Clay                (Color, Css, None (none), a, after,
+                                      backgroundColor, body, bold, border,
+                                      borderBox, borderRadius, both, boxShadow,
+                                      boxSizing, bsColor, button, clear, color,
+                                      content, display, displayTable, easeInOut,
+                                      em, float, floatRight, focus, fontFamily,
+                                      fontSize, fontWeight, gray, input,
+                                      lightgray, margin, marginBottom,
+                                      marginTop, outline, padding, pct, pt, px,
+                                      renderWith, rgb, sansSerif, sec,
                                       shadowWithBlur, solid, star,
-                                      stringContent, transition, width, ( # ),
-                                      (?), (^=))
+                                      stringContent, transition, visited, white,
+                                      width, ( # ), (?), (^=))
 import           Clay.Render         (htmlInline)
 import           Control.Applicative (Applicative (pure), (<$>))
 import           Control.Category    (Category ((.)))
+import           Control.Monad.Fix   (MonadFix)
+import           Data.Bool           (Bool (..), not)
+import           Data.Default        (Default (def))
 import           Data.Foldable       (traverse_)
-import           Data.Function       (($), (&))
+import           Data.Function       (const, ($), (&))
 import           Data.Functor        (void)
 import           Data.Map            (Map)
 import           Data.Maybe          (Maybe (..))
@@ -29,15 +34,30 @@ import           Data.Text           (Text)
 import qualified Data.Text           as Text
 import qualified Data.Text.Lazy      as Lazy
 import           Data.Tuple          (fst)
-import           MediaQuery
-import           Reflex.Dom          (ffor, elAttr', EventName(Click), HasDomEvent(domEvent), AttributeName,
+import           MediaQuery          (ResponsiveClass (rcClass, rcCss),
+                                      desktopOnly, onDesktopBorder,
+                                      onDesktopDisplayImportant,
+                                      onDesktopDisplayNone,
+                                      onDesktopMaxWidth370px,
+                                      onDesktopMkOverlay, onMobileAtBottom,
+                                      onMobileDisplayNone, onMobileFloatLeft,
+                                      onMobileFloatRight, onMobileFontBig,
+                                      onMobileHeight80, onMobileMkOverlay,
+                                      onMobileWidthAuto, onMobileWidthFull,
+                                      respClasses)
+import           Reflex.Dom          (MonadHold(holdDyn), AttributeName,
                                       DomBuilder (DomBuilderSpace, inputElement),
-                                      Element, EventResult, InputElement (..),
-                                      InputElementConfig, Reflex(Event, Dynamic),
-                                      blank, el, elAttr, elClass',
-                                      elementConfig_initialAttributes,
-                                      inputElementConfig_elementConfig, text,
-                                      (.~), (=:))
+                                      Element, EventName (Click), EventResult,
+                                      HasDomEvent (domEvent), InputElement (..),
+                                      InputElementConfig,
+                                      Reflex (Dynamic, Event, current, updated),
+                                      attachWith, blank, el, el', elAttr,
+                                      elAttr', elClass',
+                                      elementConfig_initialAttributes, ffor,
+                                      inputElementConfig_elementConfig,
+                                      inputElementConfig_initialChecked,
+                                      inputElementConfig_setChecked, leftmost,
+                                      text, (.~), (=:))
 
 anthrazit :: Color
 anthrazit = rgb 8 20 48 -- #081430;
@@ -100,6 +120,23 @@ btnSend inner = do
                marginTop (em 1)
   (e, _) <- elAttr' "button" (cls <> style css) inner
   pure $ domEvent Click e
+
+checkbox ::
+  ( DomBuilder t m
+  , MonadHold t m
+  , MonadFix m
+  ) => Bool -> Text -> m (Dynamic t Bool)
+checkbox initial description = mdo
+    cb <- inputElement $
+      def & inputElementConfig_elementConfig
+          . elementConfig_initialAttributes .~ "type" =: "checkbox"
+          & inputElementConfig_initialChecked .~ initial
+          & inputElementConfig_setChecked .~ eClickCB
+    (elSpan, _) <- el' "span" $ text description
+    let dynCbChecked = _inputElement_checked cb
+        eToggle = leftmost [void $ updated dynCbChecked, domEvent Click elSpan]
+        eClickCB = attachWith (const . not) (current dynCbChecked) eToggle
+    holdDyn initial eClickCB
 
 myBorderRadius :: Css
 myBorderRadius = borderRadius (px 12) (px 12) (px 12) (px 12)

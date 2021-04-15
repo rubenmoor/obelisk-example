@@ -19,7 +19,7 @@ import           Obelisk.Route               (pattern (:/), R)
 
 import           Reflex.Dom.Core             (blank, el, elAttr, text)
 
-import           Clay                        (Center (center), None (none),
+import           Clay                        (marginLeft, inlineFlex, flex, alignItems, justifyContent, em, marginRight, minHeight, height, fontSizeCustom, Font(font), smaller, fontSize, darkgray, color, pointer, Cursor(cursor), Center (center), None (none),
                                               absolute, backgroundColor, block,
                                               compact, display, padding,
                                               position, px, renderWith, right,
@@ -52,16 +52,16 @@ import           MediaQuery                  (ResponsiveClass (rcClass),
                                               onMobileMkOverlay,
                                               onMobileWidthAuto, respClass,
                                               respClasses)
-import           Obelisk.Route.Frontend      (RoutedT, mapRoutedT, routeLink,
+import           Obelisk.Route.Frontend      (SetRoute, RouteToUrl, RoutedT, mapRoutedT, routeLink,
                                               subRoute_)
 import           PagesUser                   (pageAliasRename, pageLogin,
                                               pageRegister, pageAliasSelect)
-import           Reflex.Dom                  (DomBuilder (inputElement),
+import           Reflex.Dom                  (MonadHold, EventWriterT, PostBuild, DomBuilder (inputElement),
                                               EventName (Click),
                                               HasDomEvent (domEvent),
                                               PerformEvent (..),
                                               Prerender (prerender),
-                                              Reflex (never, updated), dyn,
+                                              Reflex(Dynamic, never, updated), dyn,
                                               dyn_, elAttr', elDynAttr', ffor,
                                               foldDyn, foldDynMaybe, leftmost,
                                               prerender_, runEventWriterT,
@@ -73,6 +73,9 @@ import           Shared                      (cssGeneral, iFa, iFa', navBorder,
 import           State                       (EStateUpdate (..), Session (..),
                                               State (..))
 import Reflex.Dom (EventWriter(tellEvent))
+import Control.Monad.Fix (MonadFix)
+import Model (Alias(aliasName))
+import Common.Auth (UserInfo(uiAlias))
 
 pageHome
   :: forall t (m :: * -> *)
@@ -80,11 +83,24 @@ pageHome
   =>  m ()
 pageHome = pure ()
 
+navigation
+  :: forall js t (m :: * -> *).
+  ( DomBuilder t m
+  , EventWriter t EStateUpdate m
+  , MonadFix m
+  , MonadHold t m
+  , PostBuild t m
+  , Prerender js t m
+  , RouteToUrl (R FrontendRoute) m
+  , SetRoute t (R FrontendRoute) m
+  ) =>  Dynamic t Session -> m ()
 navigation dynSession = do
   let cssNav = do
-        textAlign center
+        -- textAlign center
         backgroundColor white
         navBorder
+        cursor pointer
+        minHeight $ px 60
       divNavBar = elAttr "div" ("class" =: unwords
         [ "row"
         , rcClass onMobileAtBottom
@@ -111,8 +127,15 @@ navigation dynSession = do
         elRegister <- routeLink (FrontendRoute_Register :/ ()) $
           spanNavBtn $ text "Register"
         pure $ leftmost $ domEvent Click <$> [elLogin, elRegister]
-      SessionUser _ _ -> do
-        elLogout <- spanNavBtn $ text "Logout"
+      SessionUser _ ui -> do
+        let alias = aliasName $ uiAlias ui
+        elLogout <- spanNavBtn $ do
+          let css = style $ do
+                color darkgray
+                fontSizeCustom smaller
+                marginRight $ em 0.5
+          elAttr "span" css $ text alias
+          text "Logout"
         let eLogout = domEvent Click elLogout
         tellEvent $ eLogout $> EStateUpdate (\s -> s { stSession = SessionAnon })
         pure eLogout
@@ -122,11 +145,16 @@ navigation dynSession = do
           ("class" =: unwords [ "col-2"
                               , rcClass onMobileWidthAuto
                               , rcClass $ onDesktopBorder navBorder
-                              ])
+                              ]
+          <> style (do minHeight $ px 60
+                       display inlineFlex
+                       alignItems center
+                       justifyContent center
+                   ))
     elHome <- routeLink (FrontendRoute_Main :/ ()) $
       spanNavBtnHome $ do
         iFa "fas fa-home"
-        elAttr "span" (respClass onMobileDisplayNone) $ text "Home"
+        elAttr "span" (respClass onMobileDisplayNone <> style (marginLeft $ em 0.5)) $ text "Home"
         blank
 
     let spanNavBars = elAttr "span" (respClasses [onDesktopDisplayNone]

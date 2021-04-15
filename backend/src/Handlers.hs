@@ -24,7 +24,7 @@ import           Common.Auth               (CompactJWT, LoginData (..),
                                             UserInfo (..), UserNew (..))
 import           Control.Applicative       (Applicative (pure))
 import           Control.Category          (Category ((.)))
-import           Control.Exception.Lifted  (catch, evaluate)
+import           Control.Exception.Lifted  (catch, evaluate, SomeException)
 import           Control.Monad             (unless, Monad ((>>=)), when)
 import           Control.Monad.Except      (runExceptT)
 import           Control.Monad.IO.Class    (MonadIO (liftIO))
@@ -46,7 +46,7 @@ import Data.Map (Map)
 import           Data.Maybe                (Maybe (Just, Nothing), isJust,
                                             maybe)
 import           Data.Monoid               ((<>))
-import           Data.Ord                  (Ord((<)), Down (Down))
+import           Data.Ord                  (Ord((>), (<)), Down (Down))
 import           Data.Password             (mkPassword)
 import           Data.Password.Argon2      (PasswordCheck (..), checkPassword,
                                             hashPassword)
@@ -84,6 +84,7 @@ import           Snap.Core                 (Snap, getHeader, getRequest)
 import           Text.Blaze.Renderer.Utf8  (renderMarkup)
 import           Text.Heterocephalus       (compileHtmlFile)
 import           Text.Show                 (Show (show))
+import System.IO (print)
 
 default(Text)
 
@@ -123,7 +124,7 @@ mkContext jwk pool =
           pure (u, a)
         (Entity _ User{..}, Entity uiKeyAlias uiAlias) <- case ls of
           [entry] -> pure entry
-          _       -> toServerError ("user not found" :: String)
+          _       -> toServerError $ "user not found: " <> Text.unpack uiUserName
         let uiIsSiteAdmin = userIsSiteAdmin
         clearances <- runDb' pool $
           joinMTo1Where' ClearanceFkPodcast PodcastId
@@ -267,12 +268,16 @@ handleUserNew :: UserNew -> Handler (CompactJWT, UserInfo)
 handleUserNew UserNew{..} = do
   when (Text.null unPassword) $
     throwError $ err400 { errBody = "Password cannot be empty" }
+  when (Text.length unUserName > 64) $
+    throwError $ err400 { errBody = "User name max length: 64 characters" }
+  when (Text.length unPassword > 64) $
+    throwError $ err400 { errBody = "Password max length: 64 characters" }
   uiIsSiteAdmin <- runDb $ (null :: [Entity User] -> Bool) <$> getAll
   eventSourceId <- runDb $ insert EventSource
   user <- runDb $ insert $ User unUserName uiIsSiteAdmin eventSourceId Nothing
   password <- hashPassword (mkPassword unPassword)
   runDb $ insert_ $ AuthPwd user password
-  let uiAlias = Alias unUserName user
+  let uiAlias = Alias (Text.take 16 unUserName) user
   uiKeyAlias <- runDb $ insert uiAlias
   runDb $ update user [ UserFkDefaultAlias =. Just uiKeyAlias ]
   now <- liftIO getCurrentTime
@@ -351,7 +356,9 @@ handleEpisodeNew theShow ui@UserInfo{..} EpisodeNew{..} = do
   runDb $ insert_ Journal{..}
 
 handleAliasRename :: UserInfo -> Text -> Handler ()
-handleAliasRename UserInfo{..} new =
+handleAliasRename UserInfo{..} new = do
+  when (Text.length new > 16) $
+    throwError $ err400 { errBody = "alias max length is 16 characters" }
   runDb $ update uiKeyAlias [ AliasName =. new ]
 
 handleAliasGetAll :: UserInfo -> Handler [Text]

@@ -11,10 +11,10 @@ module Auth where
 
 import           Common.Auth          (CompactJWT (CompactJWT))
 import           Control.Applicative  (Applicative (pure))
-import           Control.Lens         ((?~), (^.))
+import           Control.Lens         ((^?), (?~), (^.), _Just)
 import           Control.Monad.Except (MonadError, throwError)
 import           Control.Monad.Time   (MonadTime)
-import           Crypto.JWT           (Audience (..), ClaimsSet, JWK,
+import           Crypto.JWT           (string, Audience (..), ClaimsSet, JWK,
                                        JWTError (..), MonadRandom,
                                        NumericDate (..), StringOrURI,
                                        bestJWSAlg, claimAud, claimExp, claimIat,
@@ -31,7 +31,7 @@ import           Data.Text            (Text)
 import qualified Data.Text            as Text
 import qualified Data.Text.Encoding   as Text
 import           Data.Time            (UTCTime, addUTCTime)
-import           Text.Show            (Show (show))
+import Control.Category (Category((.)))
 
 audience :: StringOrURI
 audience = "https://www.serendipity.works"
@@ -62,6 +62,6 @@ verifyCompactJWT jwk (CompactJWT str)  = do
   jwt <- decodeCompact $ BL.fromStrict $ Text.encodeUtf8 str
   let config = defaultJWTValidationSettings (== audience)
   claims <- verifyClaims config jwk jwt
-  case claims ^. claimSub of
+  case claims ^. claimSub ^? _Just . string of
     Nothing  -> throwError $ JWTClaimsSetDecodeError "no subject in claims"
-    Just s   -> pure $ Text.pack $ show s
+    Just s   -> pure s

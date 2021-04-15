@@ -74,11 +74,12 @@ User                             -- some real person
   isSiteAdmin      Bool
   fkEventSource    EventSourceId
   fkDefaultAlias   AliasId Maybe
+  deriving Show
 Alias                            -- one of several identities
   name             Text
   fkUser           UserId
   UAliasName name
-  deriving Generic
+  deriving Generic Show
 Clearance
   fkAlias          AliasId
   fkPodcast        PodcastId

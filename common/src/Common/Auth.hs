@@ -98,7 +98,7 @@ data UserInfo = UserInfo
   , uiAlias       :: Alias
   , uiKeyAlias    :: Key Alias
   , uiClearances  :: Map Text Rank
-  } deriving (Generic)
+  } deriving (Show, Generic)
 
 instance FromJSON UserInfo
 instance ToJSON UserInfo

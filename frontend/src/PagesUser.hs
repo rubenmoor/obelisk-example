@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE KindSignatures      #-}
 {-# LANGUAGE LambdaCase          #-}
@@ -14,7 +15,7 @@ module PagesUser
   , pageAliasRename
   ) where
 
-import           Clay                   (absolute, backgroundColor, border,
+import           Clay                   (maxWidth, absolute, backgroundColor, border,
                                          color, em, float, floatRight,
                                          lightgrey, padding, position, px, red,
                                          solid, white, width, zIndex)
@@ -28,7 +29,7 @@ import           Control.Applicative    (Applicative (pure))
 import           Control.Category       (Category (id, (.)))
 import           Control.Monad          (Monad)
 import           Control.Monad.Fix      (MonadFix)
-import           Data.Bool              (Bool (..), not)
+import           Data.Bool              (bool, Bool (..), not)
 import           Data.Either            (Either (..), either)
 import           Data.Foldable          (forM_, traverse_)
 import           Data.Function          (const, ($), (&))
@@ -47,7 +48,7 @@ import           MediaQuery             (onDesktopMaxWidth370px,
 import           Model                  (Alias (aliasName))
 import           Obelisk.Route          (pattern (:/), R)
 import           Obelisk.Route.Frontend (RouteToUrl, SetRoute (..), routeLink)
-import           Reflex.Dom             (DomBuilder (inputElement),
+import           Reflex.Dom             (elementConfig_modifyAttributes, DomBuilder (inputElement),
                                          EventName (Click),
                                          EventWriter (tellEvent),
                                          HasDomEvent (domEvent),
@@ -56,7 +57,7 @@ import           Reflex.Dom             (DomBuilder (inputElement),
                                          PostBuild (getPostBuild),
                                          Prerender (prerender),
                                          Reflex (Dynamic, current, never, updated),
-                                         attachWith, blank, button, checkbox,
+                                         attachWith, blank, button,
                                          constDyn, def, dyn, dyn_, el, el',
                                          elAttr, elAttr',
                                          elementConfig_initialAttributes, ffor,
@@ -69,7 +70,7 @@ import           Reflex.Dom             (DomBuilder (inputElement),
                                          (.~), (=:))
 import           Route                  (FrontendRoute (..))
 import           Servant.Common.Req     (reqFailure, reqSuccess)
-import           Shared                 (btnSend, elLabelInput, iFa, style)
+import           Shared                 (checkbox, btnSend, elLabelInput, iFa, style)
 import           State                  (EStateUpdate (..), Session (..),
                                          State (..))
 
@@ -110,7 +111,12 @@ pageRegister =
     (userName, iUserName) <- elLabelInput def "Username" "username"
     divFieldDescription $ text "Your user name is not publicly visible. You \
                                \can choose your public alias in the next step."
-    (password, _) <- elLabelInput def "Password" "password"
+    let conf = def
+          & inputElementConfig_elementConfig
+          . elementConfig_modifyAttributes
+          .~ (bool ("type" =: Just "text") ("type" =: Just "password") <$> eClickCb)
+    (password, _) <- elLabelInput conf "Password" "password"
+    eClickCb <- updated <$> checkbox False "Hide password input"
     divFieldDescription $ text "You enter your password only once. There are \
                                \no invalid passwords except for an empty one.\
                                \ Password reset via email can be optionally added later."
@@ -149,15 +155,16 @@ pageLogin
 pageLogin =
   divOverlay $ mdo
     (userName, _) <- elLabelInput def "Username" "username"
-    (password, _) <- elLabelInput def "Password" "password"
+    (password, inputPwd) <- elLabelInput def "Password" "password"
     widgetHold_ blank $ ffor success $ \case
       Just _ -> blank
       Nothing -> elAttr "span" (style $ color red) $ text "wrong password"
     eSend <- btnSend $ text "Login"
-    let eLoginData = ffor (zipDyn userName password) $ \case
+    let eEnter = keypress Enter inputPwd
+        eLoginData = ffor (zipDyn userName password) $ \case
           (Just u, Just p) -> Right $ LoginData u p
           _                -> Left "all fields are required"
-    response <- request (postAuthenticate eLoginData eSend)
+    response <- request $ postAuthenticate eLoginData $ leftmost [eSend, eEnter]
     let success = mapMaybe reqSuccess response
         loggedIn = catMaybes success
     tellEvent $ ffor loggedIn $ \(jwt, ui) ->
@@ -168,9 +175,9 @@ pageLogin =
     respAliases <- mapMaybe reqSuccess <$>
       request (getAliasAll dynEJwt dynEAlias $ void loggedIn)
     -- TODO: store current route in route /register/ to allow going back
-    setRoute $ ffor respAliases $ \ls ->
-      if null ls then FrontendRoute_Main :/ ()
-                 else FrontendRoute_AliasSelect :/ ()
+    setRoute $ ffor respAliases $ \case
+      [_] -> FrontendRoute_Main :/ ()
+      _   -> FrontendRoute_AliasSelect :/ ()
 
 getESession :: Session -> Either Text (CompactJWT, UserInfo)
 getESession SessionAnon          = Left "not logged in"
@@ -203,7 +210,7 @@ pageAliasSelect dynSession = do
       css = style $ do
         border solid (px 1) lightgrey
         padding (px 8) (px 8) (px 8) (px 8)
-        width (em 32)
+        maxWidth (em 32)
   divOverlay $ do
     eAliases <- mapMaybe reqSuccess <$>
                 request (getAliasAll dynEJwt dynEAlias pb)
@@ -219,15 +226,7 @@ pageAliasSelect dynSession = do
                    request (postAliasSetDefault dynEJwt dynEAlias dynAlias eClick)
             else pure eClick
         switchHold never eEDone
-      (elCb, dynCbChecked) <- el' "div" $ do
-        cb <- inputElement $
-          def & inputElementConfig_elementConfig
-              . elementConfig_initialAttributes .~ "type" =: "checkbox"
-              & inputElementConfig_initialChecked .~ True
-              & inputElementConfig_setChecked .~ eClickCB
-        text "Make default alias"
-        pure $ _inputElement_checked cb
-      let eClickCB = attachWith (const . not) (current dynCbChecked) $ domEvent Click elCb
+      dynCbChecked <- checkbox True "Make default"
       setRoute $ leftmost es $> FrontendRoute_Main :/ ()
 
 pageAliasRename

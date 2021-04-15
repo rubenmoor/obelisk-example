@@ -3,7 +3,7 @@
 
 module MediaQuery where
 
-import           Clay           (lightgray, solid, border, Auto (auto), Css, None (none), Selector,
+import           Clay           (Center(center), alignItems, justifyContent, flex, inlineFlex, lightgray, solid, border, Auto (auto), Css, None (none), Selector,
                                  absolute, block, bottom, display, fixed, float,
                                  floatLeft, floatRight, fontSize, height,
                                  important, left, maxWidth, paddingBottom, pct,
@@ -55,7 +55,11 @@ onMobileDisplayNone =
 
 onDesktopDisplayImportant :: ResponsiveClass
 onDesktopDisplayImportant =
-  mkResponsiveClass desktopOnly (important $ display block) ".onDesktopDisplayImportant"
+  mkResponsiveClass desktopOnly
+    (do important $ display flex
+        alignItems center
+        justifyContent center
+    ) ".onDesktopDisplayImportant"
 
 onMobileAtBottom :: ResponsiveClass
 onMobileAtBottom =
@@ -84,19 +88,21 @@ onMobileFontBig =
 
 onMobileMkOverlay :: ResponsiveClass
 onMobileMkOverlay =
-  mkResponsiveClass mobileOnly (do -- width $ pct 100
-                                   height $ pct 100
-                                   top $ px 0
-                                   important $ paddingBottom $ px 100
-                               ) ".onMobileMkOverlay"
+  mkResponsiveClass mobileOnly
+    (do width $ pct 100
+        height $ pct 100
+        top $ px 0
+        important $ paddingBottom $ px 100
+        ) ".onMobileMkOverlay"
 
 onDesktopMkOverlay :: ResponsiveClass
 onDesktopMkOverlay =
   mkResponsiveClass desktopOnly
     (do position absolute
-        top (pct 50)
-        left (pct 50)
+        top $ pct 50
+        left $ pct 50
         transform (translate (pct $ -50) $ pct $ -50)
+        maxWidth $ px 418
     ) ".onDesktopMkOverlay"
 
 onMobileWidthFull :: ResponsiveClass
