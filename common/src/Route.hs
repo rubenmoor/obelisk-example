@@ -45,6 +45,7 @@ data FrontendRoute :: * -> * where
   FrontendRoute_Main     :: FrontendRoute ()
   FrontendRoute_Register :: FrontendRoute ()
   FrontendRoute_Login    :: FrontendRoute ()
+  FrontendRoute_SelectAlias :: FrontendRoute ()
 
 fullRouteEncoder
   :: Encoder (Either Text) Identity (R (FullRoute BackendRoute FrontendRoute)) PageName
@@ -59,6 +60,7 @@ fullRouteEncoder = mkFullRouteEncoder
       FrontendRoute_Main -> PathEnd $ unitEncoder mempty
       FrontendRoute_Register -> PathSegment "register" $ unitEncoder mempty
       FrontendRoute_Login -> PathSegment "login" $ unitEncoder mempty
+      FrontendRoute_SelectAlias -> PathSegment "select-alias" $ unitEncoder mempty
   )
 
 concat <$> mapM deriveRouteComponent

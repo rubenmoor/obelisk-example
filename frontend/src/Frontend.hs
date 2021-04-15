@@ -5,8 +5,6 @@
 {-# LANGUAGE OverloadedLists     #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternSynonyms     #-}
-{-# LANGUAGE RecordWildCards     #-}
-
 {-# LANGUAGE RecursiveDo         #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
@@ -32,8 +30,8 @@ import           Control.Monad               (Monad ((>>=)))
 import qualified Data.Aeson                  as Aeson
 import           Data.Bool                   (Bool (False, True), bool, not)
 import           Data.Default                (Default (def))
-import           Data.Function               (($))
-import           Data.Functor                (Functor (fmap), ($>), (<$>))
+import           Data.Function               (const, ($))
+import           Data.Functor                (void, Functor (fmap), ($>), (<$>))
 import           Data.Maybe                  (Maybe (..), fromMaybe, maybe)
 import           Data.Monoid                 ((<>))
 import           Data.Text                   (Text, unwords)
@@ -56,8 +54,8 @@ import           MediaQuery                  (ResponsiveClass (rcClass),
                                               respClasses)
 import           Obelisk.Route.Frontend      (RoutedT, mapRoutedT, routeLink,
                                               subRoute_)
-import           PagesUser                   (pageRegister)
-import           Reflex.Dom                  (prerender_, DomBuilder (inputElement),
+import           PagesUser                   (pageLogin, pageRegister, pageSelectAlias)
+import           Reflex.Dom                  (tailE, widgetHold_, prerender_, DomBuilder (inputElement),
                                               EventName (Click),
                                               HasDomEvent (domEvent),
                                               PerformEvent (..),
@@ -150,33 +148,38 @@ htmlBody
   :: forall t js (m :: * -> *)
   . (ObeliskWidget js t (R FrontendRoute) m)
   => RoutedT t (R FrontendRoute) m ()
-htmlBody = do
+htmlBody = mdo
 
   -- get application state on startup
   -- ePostBuild <- getPostBuild
   let key = "state" :: Text
       getState s = getItem s key
       setState d s = setItem s key d
-  dynMState <- prerender (pure Nothing) $ do
+  dynLoadState <- prerender (pure $ EStateUpdate $ const def) $ do
     -- performEvent $ ePostBuild $>
     mStr <- liftJSM (currentWindowUnchecked >>= getLocalStorage >>= getState)
     let mState = mStr >>= Aeson.decode . Lazy.encodeUtf8 . Lazy.fromStrict
-    pure $ Just $ fromMaybe def mState
+    pure $ EStateUpdate $ const $ fromMaybe def mState
 
-  dyn_ $ ffor dynMState $ maybe (loadingScreen $> def) $ \state -> mdo
-    dynState <- foldDyn unEStateUpdate state eStateUpdate
+  let eLoaded = updated dynLoadState
+  widgetHold_ loadingScreen $ eLoaded $> blank
 
-    -- TODO persist application state on visibility change (when hidden)
-    prerender_ blank $ performEvent_ $ ffor (updated dynState) $ \st -> do
-      let str = Lazy.toStrict $ Lazy.decodeUtf8 $ Aeson.encode st
-      liftJSM (currentWindowUnchecked >>= getLocalStorage >>= setState str)
+  dynState <- foldDyn unEStateUpdate def $ leftmost [eLoaded, eStateUpdate]
 
-    navigation $ stSession <$> dynState
-    (_, eStateUpdate) <- mapRoutedT runEventWriterT $
-      subRoute_ $ \case
-        FrontendRoute_Main     -> pageHome
-        FrontendRoute_Register -> pageRegister
-    blank
+  -- TODO persist application state on visibility change (when hidden)
+  eUpdated <- tailE $ updated dynState
+  prerender_ blank $ performEvent_ $ ffor eUpdated $ \st -> do
+    let str = Lazy.toStrict $ Lazy.decodeUtf8 $ Aeson.encode st
+    liftJSM (currentWindowUnchecked >>= getLocalStorage >>= setState str)
+
+  navigation $ stSession <$> dynState
+  (_, eStateUpdate) <- mapRoutedT runEventWriterT $
+    subRoute_ $ \case
+      FrontendRoute_Main        -> pageHome
+      FrontendRoute_Register    -> pageRegister
+      FrontendRoute_Login       -> pageLogin
+      FrontendRoute_SelectAlias -> pageSelectAlias $ stSession <$> dynState
+  blank
   where
     loadingScreen =
       let cls = respClasses
@@ -188,7 +191,7 @@ htmlBody = do
                    position absolute
       in  elAttr "div" (cls <> style css) $ do
             iFa "fas fa-spinner fa-spin"
-            text "Loading ..."
+            text " Loading ..."
 
     -- TODO: replace with home component
     -- el "h1" $ text "Create new episode"

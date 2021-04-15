@@ -82,12 +82,15 @@ instance (HasClient t m api tag, Reflex t)
       => HasClient t m (AuthProtect realm :> api) tag where
 
   type Client t m (AuthProtect realm :> api) tag =
-    Dynamic t (Either Text CompactJWT) -> Client t m api tag
+       Dynamic t (Either Text CompactJWT)
+    -> Dynamic t (Either Text Text)
+    -> Client t m api tag
 
-  clientWithRouteAndResultHandler Proxy q t req baseurl opts wrap token =
+  clientWithRouteAndResultHandler Proxy q t req baseurl opts wrap token alias =
     clientWithRouteAndResultHandler (Proxy :: Proxy api) q t req' baseurl opts wrap
       where
-        req' = addHeader "Authorization" token req
+        req' = addHeader "Authorization" token $
+               addHeader "X-Alias" alias req
 
 data UserInfo = UserInfo
   { uiIsSiteAdmin :: Bool

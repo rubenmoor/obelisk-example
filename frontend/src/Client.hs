@@ -47,7 +47,8 @@ postDoesUserExist
 postEpisodeNew
   :: SupportsServantReflex t m
   => Dynamic t (Either Text Text) -- podcast identifier
-  -> Dynamic t (Either Text CompactJWT) -- compactJWT
+  -> Dynamic t (Either Text CompactJWT)
+  -> Dynamic t (Either Text Text) -- alias
   -> Dynamic t (Either Text EpisodeNew)
   -> Event t ()
   -> m (Event t (ReqResult () ()))
@@ -55,14 +56,37 @@ postEpisodeNew
 postAliasRename
   :: SupportsServantReflex t m
   => Dynamic t (Either Text CompactJWT)
+  -> Dynamic t (Either Text Text) -- alias
   -> Dynamic t (Either Text Text)
   -> Event t ()
   -> m (Event t (ReqResult () ()))
 
-((postAuthenticate :<|> postAuthNew :<|> postDoesUserExist)
-   :<|> (postEpisodeNew)
-   :<|> postAliasRename
- ) =
+getAliasAll
+  :: SupportsServantReflex t m
+  => Dynamic t (Either Text CompactJWT)
+  -> Dynamic t (Either Text Text)
+  -> Event t ()
+  -> m (Event t (ReqResult () [Text]))
+
+postAliasSetDefault
+  :: SupportsServantReflex t m
+  => Dynamic t (Either Text CompactJWT)
+  -> Dynamic t (Either Text Text) -- alias
+  -> Dynamic t (Either Text Text)
+  -> Event t ()
+  -> m (Event t (ReqResult () ()))
+
+(
+       (    postAuthenticate
+       :<|> postAuthNew
+       :<|> postDoesUserExist
+       )
+  :<|> (postEpisodeNew)
+  :<|> (    postAliasRename
+       :<|> getAliasAll
+       :<|> postAliasSetDefault
+       )
+  ) =
   client (Proxy :: Proxy RoutesApi)
          (Proxy :: Proxy (m :: * -> *))
          (Proxy :: Proxy ())

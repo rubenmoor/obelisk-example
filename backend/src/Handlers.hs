@@ -17,8 +17,7 @@ module Handlers
 
 import           AppData                   (DbAction, EnvApplication (..),
                                             Handler)
-import           Auth                      (mkClaims, mkCompactJWT, mkSub,
-                                            runSub, verifyCompactJWT)
+import           Auth                      (mkClaims, mkCompactJWT, verifyCompactJWT)
 import           Common                    (EpisodeNew (..), Routes,
                                             convertToFilename, formatDuration)
 import           Common.Auth               (CompactJWT, LoginData (..),
@@ -59,7 +58,7 @@ import qualified Data.Text                 as Text
 import           Data.Time                 (defaultTimeLocale, formatTime,
                                             getCurrentTime, parseTimeM)
 import           Data.Tuple                (snd)
-import           Database.Gerippe          (join1ToMWhere', join1ToM', Entity (..), InnerJoin (..),
+import           Database.Gerippe          (joinMTo1Where, join1ToMWhere, Entity (..), InnerJoin (..),
                                             PersistStoreWrite (insert, insert_),
                                             PersistUniqueRead (getBy),
                                             PersistentSqlException, from,
@@ -104,12 +103,16 @@ mkContext jwk pool =
       authHandler = do
         let toServerError e = throwError $ err500 { errBody = BSU.fromString $ show e}
             for = flip fmap
-        mStr <- getHeader "Authorization" <$> getRequest
-        str <- maybe (toServerError ("authorization header missing" :: String))
-               pure mStr
-        jwt <- either toServerError pure $ parseHeader str
+        mAuth <- getHeader "Authorization" <$> getRequest
+        auth <- maybe (toServerError ("authorization header missing" :: String))
+                pure mAuth
+        mAlias <- getHeader "X-Alias" <$> getRequest
+        aliasBs <- maybe (toServerError ("X-Alias header missing" :: String))
+                   pure mAlias
+        uiAliasName <- either toServerError pure $ parseHeader aliasBs
+        jwt <- either toServerError pure $ parseHeader auth
         eSub <- liftIO $ runExceptT $ verifyCompactJWT jwk jwt
-        (uiUserName, uiAliasName) <- runSub <$> either toServerError pure eSub
+        uiUserName <- either toServerError pure eSub
         ls <- runDb' pool $ select . from $ \(a `InnerJoin` u) -> do
           on     $ a ^. AliasFkUser ==. u ^. UserId
           where_ $ u ^. UserName ==. val uiUserName
@@ -117,7 +120,7 @@ mkContext jwk pool =
           pure (u, a)
         (Entity _ User{..}, Entity uiKeyAlias uiAlias) <- case ls of
           [entry] -> pure entry
-          _       -> toServerError ("user/alias not found" :: String)
+          _       -> toServerError ("user not found" :: String)
         let uiIsSiteAdmin = userIsSiteAdmin
         clearances <- runDb' pool $
           joinMTo1Where' ClearanceFkPodcast PodcastId
@@ -136,7 +139,10 @@ handlers =
     :<|> handleDoesUserExist
         )
   :<|> handleEpisodeNew
-  :<|> handleAliasRename
+  :<|>  (handleAliasRename
+    :<|> handleAliasGetAll
+    :<|> handleAliasSetDefault
+        )
 
 runDb :: DbAction a -> Handler a
 runDb action = do
@@ -243,7 +249,7 @@ handleGrantAuthPwd LoginData{..} = do
             journalSubject = SubjectUser
             journalFkEventSource = userFkEventSource
         in  Journal{..}
-      let claims = mkClaims now (mkSub ldUserName $ aliasName uiAlias)
+      let claims = mkClaims now ldUserName
       jwk <- asks envJwk
       eJwt <- liftIO $ runExceptT $ mkCompactJWT jwk claims
       uiClearances <- getClearances uiKeyAlias
@@ -283,7 +289,7 @@ handleUserNew UserNew{..} = do
         journalSubject = SubjectAlias
         journalFkEventSource = eventSourceId
     in  Journal{..}
-  let claims = mkClaims now (mkSub unUserName unUserName)
+  let claims = mkClaims now unUserName
   jwk <- asks envJwk
   eJwt <- liftIO $ runExceptT $ mkCompactJWT jwk claims
   uiClearances <- getClearances uiKeyAlias
@@ -344,3 +350,22 @@ handleEpisodeNew theShow ui@UserInfo{..} EpisodeNew{..} = do
 handleAliasRename :: UserInfo -> Text -> Handler ()
 handleAliasRename UserInfo{..} new =
   runDb $ update uiKeyAlias [ AliasName =. new ]
+
+handleAliasGetAll :: UserInfo -> Handler [Text]
+handleAliasGetAll UserInfo{..} = do
+  mUser <- runDb $ getBy $ UUserName uiUserName
+  keyUser <- maybe (throwError $ err500 { errBody = "user not found" })
+                   (pure . entityKey)
+                   mUser
+  ls <- runDb $ getWhere AliasFkUser keyUser
+  pure $ aliasName . entityVal <$> ls
+
+handleAliasSetDefault :: UserInfo -> Text -> Handler ()
+handleAliasSetDefault UserInfo{..} aliasName = do
+  keyAlias <- runDb (getBy $ UAliasName aliasName)
+    >>= maybe (throwError $ err500 { errBody = "alias name not found" })
+              (pure . entityKey)
+  keyUser <- runDb (getBy $ UUserName uiUserName)
+    >>= maybe (throwError $ err500 { errBody = "user not found" })
+              (pure . entityKey)
+  runDb $ update keyUser [ UserFkDefaultAlias =. Just keyAlias ]
