@@ -28,6 +28,12 @@ let password-repo = pkgs.fetchFromGitHub {
       rev = "6b243c282ca3d5fed50fbabe0f25bf152ad8f8cf";
       sha256 = "1qkhyd3x67dgag2xz32sd94n3zyhr1r2n0j8p2rlva74ar8qdgln";
     };
+    reflex-dom-framework = pkgs.fetchFromGitHub {
+      owner = "reflex-frp";
+      repo = "reflex-dom";
+      rev = "6a7782a61e90e7369a8278441eb47f702bb7c63b";
+      sha256 = "13y2h9cqhll55qgk7x33wnz88822irkdxych1c0fbw20jghhp96h";
+    };
 in
   project ./. ({ ... }: {
     android.applicationId = "systems.obsidian.obelisk.examples.minimal";
@@ -43,6 +49,12 @@ in
         sha256 = "08i8462pp76p1kkrpa1968ky7y9jbxz4073qmx9l8r83wqwwjxkk";
       }) {};
       persistent = self.callHackage "persistent" "2.9.2" {};
+      reflex-dom = self.callCabal2nix "reflex-dom" (reflex-dom-framework + /reflex-dom) {};
+      reflex-dom-core = pkgs.haskell.lib.dontCheck (
+        self.callCabal2nix "reflex-dom-core" (
+          reflex-dom-framework + /reflex-dom-core
+        ) {}
+      );
       servant-reflex = self.callCabal2nix "servant-reflex" (pkgs.fetchFromGitHub {
         owner = "imalsogreg";
         repo = "servant-reflex";
@@ -62,11 +74,5 @@ in
       password-instances = self.callCabal2nix "password-instances"
         (password-repo + /password-instances) {};
       clay = self.callHackage "clay" "0.13.3" {};
-      # reflex-dom-storage = pkgs.fetchFromGitHub {
-      #   owner = "qfpl";
-      #   repo = "reflex-dom-storage";
-      #   rev = "2ffa13a48740681993dead6a10830c23d251d3a4";
-      #   sha256 = "0dxqxm9lh30hn73zfbgyb81f40697fiq89kkk2igncjg9mdb1096";
-      # };
     };
   })
