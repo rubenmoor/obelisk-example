@@ -33,6 +33,7 @@ import           Servant.API.ContentTypes (Accept (..), MimeRender (..),
 import           Text.Printf              (printf)
 import           Text.Read                (Read)
 import           Text.Show                (Show)
+import Model (Podcast)
 
 type Routes =
        RouteShow
@@ -51,6 +52,11 @@ type RoutesApi = "api" :>
     )
    :<|> "epsiode" :> Capture "podcast_id" Text :>
     (      AuthProtect "jwt" :> RouteEpisodeNew
+    )
+   :<|> "podcast" :>
+    (
+           AuthProtect "jwt" :> RoutePodcastNew
+      :<|> RoutePodcastGet
     )
    :<|> "alias" :>
     (      AuthProtect "jwt" :> RouteAliasRename
@@ -79,6 +85,11 @@ data EpisodeNew = EpisodeNew
 
 instance FromJSON EpisodeNew
 instance ToJSON EpisodeNew
+
+-- podcast
+
+type RoutePodcastNew = "new" :> ReqBody '[JSON] Text :> Post '[JSON] ()
+type RoutePodcastGet = Capture "podcast_id" Text :> Get '[JSON] Podcast
 
 routes :: Proxy Routes
 routes = Proxy

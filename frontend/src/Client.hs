@@ -3,28 +3,45 @@
 {-# LANGUAGE NoImplicitPrelude         #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings         #-}
+{-# LANGUAGE Rank2Types                #-}
 
 module Client where
 
-import           Common         (EpisodeNew, RoutesApi)
-import           Common.Auth    (CompactJWT, LoginData (..), UserNew (..), UserInfo)
-import           Data.Bool      (Bool)
-import           Data.Data      (Proxy (..))
-import           Data.Either    (Either)
-import           Data.Maybe     (Maybe)
-import           Data.Text      (Text)
-import           Reflex.Dom     (switchDyn, Prerender(Client, prerender),  Reflex(never, Dynamic, Event), constDyn)
-import           Servant.API    ((:<|>) (..))
-import           Servant.Reflex (BaseUrl (..), ReqResult, SupportsServantReflex,
-                                 client)
-import Control.Applicative (Applicative(pure), (<$>))
-import Control.Monad (Monad)
+import           Common              (EpisodeNew, RoutesApi)
+import           Common.Auth         (CompactJWT, LoginData (..),
+                                      UserInfo (uiAlias), UserNew (..))
+import           Control.Applicative (Applicative (pure), (<$>))
+import           Control.Monad       (Monad)
+import           Data.Bool           (Bool)
+import           Data.Data           (Proxy (..))
+import           Data.Either         (Either (..))
+import           Data.Function       (($))
+import           Data.Functor        (Functor (fmap))
+import           Data.Maybe          (Maybe)
+import           Data.Text           (Text)
+import           Model               (Podcast, Alias (aliasName))
+import           Reflex.Dom          (Prerender (Client, prerender),
+                                      Reflex (Dynamic, Event, never), constDyn,
+                                      ffor, switchDyn)
+import           Servant.API         ((:<|>) (..))
+import           Servant.Reflex      (BaseUrl (..), ReqResult,
+                                      SupportsServantReflex, client)
+import           State               (Session (..), State (stSession))
 
 request
   :: (Prerender js t m, Monad m)
   => Client m (Event t (ReqResult () a))
   -> m (Event t (ReqResult () a))
 request r = switchDyn <$> prerender (pure never) r
+
+getAuthData
+  :: Functor (Dynamic t)
+  => Dynamic t State
+  -> Dynamic t (Either Text (CompactJWT, Text))
+getAuthData dynState =
+  ffor dynState $ \st -> case stSession st of
+    SessionAnon        -> Left "not logged in"
+    SessionUser jwt ui -> Right (jwt, aliasName $ uiAlias ui)
 
 postAuthenticate
   :: SupportsServantReflex t m
@@ -44,34 +61,49 @@ postDoesUserExist
   -> Event t ()
   -> m (Event t (ReqResult () Bool))
 
+-- episode
+
 postEpisodeNew
   :: SupportsServantReflex t m
   => Dynamic t (Either Text Text) -- podcast identifier
-  -> Dynamic t (Either Text CompactJWT)
-  -> Dynamic t (Either Text Text) -- alias
+  -> Dynamic t (Either Text (CompactJWT, Text))
   -> Dynamic t (Either Text EpisodeNew)
   -> Event t ()
   -> m (Event t (ReqResult () ()))
 
+-- podcast
+
+postPodcastNew
+  :: SupportsServantReflex t m
+  => Dynamic t (Either Text (CompactJWT, Text))
+  -> Dynamic t (Either Text Text) -- podcast identifier
+  -> Event t ()
+  -> m (Event t (ReqResult () ()))
+
+getPodcast
+  :: SupportsServantReflex t m
+  => Dynamic t (Either Text Text) -- podcast identifier
+  -> Event t ()
+  -> m (Event t (ReqResult () Podcast))
+
+-- user
+
 postAliasRename
   :: SupportsServantReflex t m
-  => Dynamic t (Either Text CompactJWT)
-  -> Dynamic t (Either Text Text) -- alias
+  => Dynamic t (Either Text (CompactJWT, Text))
   -> Dynamic t (Either Text Text)
   -> Event t ()
   -> m (Event t (ReqResult () ()))
 
 getAliasAll
   :: SupportsServantReflex t m
-  => Dynamic t (Either Text CompactJWT)
-  -> Dynamic t (Either Text Text)
+  => Dynamic t (Either Text (CompactJWT, Text))
   -> Event t ()
   -> m (Event t (ReqResult () [Text]))
 
 postAliasSetDefault
   :: SupportsServantReflex t m
-  => Dynamic t (Either Text CompactJWT)
-  -> Dynamic t (Either Text Text) -- alias
+  => Dynamic t (Either Text (CompactJWT, Text))
   -> Dynamic t (Either Text Text)
   -> Event t ()
   -> m (Event t (ReqResult () ()))
@@ -82,6 +114,9 @@ postAliasSetDefault
        :<|> postDoesUserExist
        )
   :<|> (postEpisodeNew)
+  :<|> (    postPodcastNew
+       :<|> getPodcast
+       )
   :<|> (    postAliasRename
        :<|> getAliasAll
        :<|> postAliasSetDefault

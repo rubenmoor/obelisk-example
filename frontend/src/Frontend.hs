@@ -5,6 +5,7 @@
 {-# LANGUAGE OverloadedLists     #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternSynonyms     #-}
+{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE RecursiveDo         #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
@@ -16,27 +17,37 @@ import qualified Data.Text.Lazy.Encoding     as Lazy
 import           Obelisk.Frontend            (Frontend (..), ObeliskWidget)
 import           Obelisk.Generated.Static    (static)
 import           Obelisk.Route               (pattern (:/), R)
-
-import           Reflex.Dom.Core             (blank, el, elAttr, text)
-
-import           Clay                        (marginLeft, inlineFlex, flex, alignItems, justifyContent, em, marginRight, minHeight, height, fontSizeCustom, Font(font), smaller, fontSize, darkgray, color, pointer, Cursor(cursor), Center (center), None (none),
-                                              absolute, backgroundColor, block,
-                                              compact, display, padding,
-                                              position, px, renderWith, right,
-                                              textAlign, white, zIndex)
+import           Clay                        (Center (center), Cursor (cursor),
+                                              None (none), absolute, alignItems,
+                                              backgroundColor, block, color,
+                                              compact, darkgray, display, em,
+                                              fontSizeCustom, inlineFlex,
+                                              justifyContent, marginLeft,
+                                              marginRight, minHeight, padding,
+                                              pointer, position, px, renderWith,
+                                              right, smaller, textAlign, white,
+                                              zIndex)
+import           Client                      (getAuthData, postPodcastNew,
+                                              request)
+import           Common.Auth                 (UserInfo (..))
 import           Control.Applicative         (Applicative (pure))
 import           Control.Category            (Category ((.)))
-import           Control.Monad               (Monad ((>>=)))
+import           Control.Monad               (Monad ((>>=)), when)
+import           Control.Monad.Fix           (MonadFix)
+import           Control.Monad.Reader        (MonadReader, ReaderT (runReaderT),
+                                              asks)
 import qualified Data.Aeson                  as Aeson
 import           Data.Bool                   (Bool (False, True), bool, not)
 import           Data.Default                (Default (def))
-import           Data.Function               (const, ($))
-import           Data.Functor                (Functor (fmap), void, ($>), (<$>))
+import           Data.Either                 (Either (..))
+import           Data.Function               (const, flip, ($))
+import           Data.Functor                (Functor (fmap), ($>), (<$>))
 import           Data.Maybe                  (Maybe (..), fromMaybe, maybe)
 import           Data.Monoid                 ((<>))
 import           Data.Text                   (Text, unwords)
 import qualified Data.Text.Lazy              as Lazy
 import           Data.Tuple                  (fst)
+import           Data.Witherable             (Filterable (mapMaybe))
 import           GHCJS.DOM                   (currentWindowUnchecked)
 import           GHCJS.DOM.Storage           (getItem, setItem)
 import           GHCJS.DOM.Window            (getLocalStorage)
@@ -52,36 +63,59 @@ import           MediaQuery                  (ResponsiveClass (rcClass),
                                               onMobileMkOverlay,
                                               onMobileWidthAuto, respClass,
                                               respClasses)
-import           Obelisk.Route.Frontend      (SetRoute, RouteToUrl, RoutedT, mapRoutedT, routeLink,
-                                              subRoute_)
-import           PagesUser                   (pageAliasRename, pageLogin,
-                                              pageRegister, pageAliasSelect)
-import           Reflex.Dom                  (MonadHold, EventWriterT, PostBuild, DomBuilder (inputElement),
+import           Model                       (Alias (aliasName))
+import           Obelisk.Route.Frontend      (RouteToUrl, RoutedT, SetRoute,
+                                              mapRoutedT, routeLink, subRoute_)
+import           PagesUser                   (pageAliasRename, pageAliasSelect,
+                                              pageLogin, pageRegister)
+import           Reflex.Dom                  (elAttr, text, el, blank, DomBuilder (inputElement),
                                               EventName (Click),
-                                              HasDomEvent (domEvent),
-                                              PerformEvent (..),
+                                              EventWriter (tellEvent),
+                                              HasDomEvent (domEvent), MonadHold,
+                                              PerformEvent (..), PostBuild,
                                               Prerender (prerender),
-                                              Reflex(Dynamic, never, updated), dyn,
-                                              dyn_, elAttr', elDynAttr', ffor,
-                                              foldDyn, foldDynMaybe, leftmost,
-                                              prerender_, runEventWriterT,
-                                              switchHold, tailE, widgetHold_,
-                                              (.~), (=:))
+                                              Reflex (Dynamic, never, updated),
+                                              dyn, dyn_, elAttr', elDynAttr',
+                                              ffor, foldDyn, foldDynMaybe,
+                                              leftmost, prerender_,
+                                              runEventWriterT, switchHold,
+                                              tailE, widgetHold_, (.~), (=:))
 import           Route                       (FrontendRoute (..))
-import           Shared                      (cssGeneral, iFa, iFa', navBorder,
-                                              style)
+import           Servant.Common.Req          (reqSuccess)
+import           Shared                      (btnSend, cssGeneral, elLabelInput,
+                                              iFa, iFa', navBorder, style)
 import           State                       (EStateUpdate (..), Session (..),
                                               State (..))
-import Reflex.Dom (EventWriter(tellEvent))
-import Control.Monad.Fix (MonadFix)
-import Model (Alias(aliasName))
-import Common.Auth (UserInfo(uiAlias))
+import PagesPodcast (pagePodcastView)
 
 pageHome
   :: forall t (m :: * -> *)
   .  DomBuilder t m
-  =>  m ()
+  => m ()
 pageHome = pure ()
+
+pageSettings
+  :: forall js t (m :: * -> *).
+  ( DomBuilder t m
+  , MonadReader (Dynamic t State) m
+  , PostBuild t m
+  , Prerender js t m
+  ) => m ()
+pageSettings = do
+  authData <- asks getAuthData
+  dynSession <- asks $ fmap stSession
+  dyn_ $ ffor dynSession $ \case
+    SessionAnon -> blank
+    SessionUser _ UserInfo{..} -> when uiIsSiteAdmin $ do
+      el "h3" $ text "Create new podcast"
+      (mStr, _) <- elLabelInput def "Podcast identifier" "podcastidentifier"
+      eSend <- btnSend $ text "Send"
+      let eStr = maybe (Left "Cannot be empty") Right <$> mStr
+      response <- request (postPodcastNew authData eStr eSend)
+      let eSuccess = mapMaybe reqSuccess response
+      -- setRoute view podcast
+      blank
+  pure ()
 
 navigation
   :: forall js t (m :: * -> *).
@@ -93,8 +127,9 @@ navigation
   , Prerender js t m
   , RouteToUrl (R FrontendRoute) m
   , SetRoute t (R FrontendRoute) m
-  ) =>  Dynamic t Session -> m ()
-navigation dynSession = do
+  , MonadReader (Dynamic t State) m
+  ) => m ()
+navigation = do
   let cssNav = do
         -- textAlign center
         backgroundColor white
@@ -109,6 +144,7 @@ navigation dynSession = do
                        backgroundColor white
                        zIndex 2
                    ))
+  dynSession <- asks $ fmap stSession
   divNavBar $ mdo
     let navButtonAttrs = ffor displayNav $ \d ->
              "class" =: unwords [ "col-2"
@@ -128,9 +164,11 @@ navigation dynSession = do
           spanNavBtn $ text "Register"
         pure $ leftmost $ domEvent Click <$> [elLogin, elRegister]
       SessionUser _ ui -> do
-        let alias = aliasName $ uiAlias ui
+        elSettings <- routeLink (FrontendRoute_Settings :/ ()) $
+          spanNavBtn $ text "Settings"
         elLogout <- spanNavBtn $ do
-          let css = style $ do
+          let alias = aliasName $ uiAlias ui
+              css = style $ do
                 color darkgray
                 fontSizeCustom smaller
                 marginRight $ em 0.5
@@ -138,7 +176,7 @@ navigation dynSession = do
           text "Logout"
         let eLogout = domEvent Click elLogout
         tellEvent $ eLogout $> EStateUpdate (\s -> s { stSession = SessionAnon })
-        pure eLogout
+        pure $ leftmost [eLogout, domEvent Click elSettings]
     eExit <- switchHold never eBtns
 
     let spanNavBtnHome = fmap fst . elAttr' "span"
@@ -157,11 +195,13 @@ navigation dynSession = do
         elAttr "span" (respClass onMobileDisplayNone <> style (marginLeft $ em 0.5)) $ text "Home"
         blank
 
-    let spanNavBars = elAttr "span" (respClasses [onDesktopDisplayNone]
-                                   <> style (do position absolute
-                                                right (px 0)
-                                                padding (px 0) (px 8) (px 0) (px 8)
-                                            ))
+    let spanNavBars =
+          elAttr "span" (
+               respClasses [onDesktopDisplayNone]
+            <> style (do position absolute
+                         right (px 0)
+                         padding (px 0) (px 8) (px 0) (px 8)
+                         ))
     elBars <- spanNavBars $ iFa' "fas fa-bars"
 
     let eHome = domEvent Click elHome
@@ -205,14 +245,16 @@ htmlBody = mdo
     let str = Lazy.toStrict $ Lazy.decodeUtf8 $ Aeson.encode st
     liftJSM (currentWindowUnchecked >>= getLocalStorage >>= setState str)
 
-  (_, eStateUpdate) <- mapRoutedT runEventWriterT $ do
-    navigation $ stSession <$> dynState
+  (_, eStateUpdate) <- mapRoutedT (flip runReaderT dynState . runEventWriterT) $ do
+    navigation
     subRoute_ $ \case
       FrontendRoute_Main        -> pageHome
       FrontendRoute_Register    -> pageRegister
       FrontendRoute_Login       -> pageLogin
-      FrontendRoute_AliasSelect -> pageAliasSelect $ stSession <$> dynState
-      FrontendRoute_AliasRename -> pageAliasRename $ stSession <$> dynState
+      FrontendRoute_AliasSelect -> pageAliasSelect
+      FrontendRoute_AliasRename -> pageAliasRename
+      FrontendRoute_Settings    -> pageSettings
+      FrontendRoute_Podcast     -> pagePodcastView
   blank
   where
     loadingScreen =

@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE EmptyCase             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -20,18 +21,31 @@ import Control.Category
 import           Data.Functor.Identity (Identity)
 import           Data.Text             (Text)
 
-import           Control.Category      (Category (id))
+import           Control.Category      (Category (id, (.)))
+import           Control.Lens          (Wrapped)
 import           Control.Monad         (mapM)
 import           Data.Either           (Either)
+import           Data.Eq               (Eq)
 import           Data.Foldable         (concat)
 import           Data.Function         (($))
 import           Data.Functor          ((<$>))
 import           Data.Monoid           (Monoid (mempty))
+import           Data.Ord              (Ord)
+import           GHC.Generics          (Generic)
 import           Obelisk.Route         (pattern (:/), Encoder,
                                         FullRoute (FullRoute_Backend), PageName,
                                         R, SegmentResult (PathEnd, PathSegment),
-                                        mkFullRouteEncoder, unitEncoder)
+                                        mkFullRouteEncoder,
+                                        singlePathSegmentEncoder, unitEncoder,
+                                        unwrappedEncoder)
 import           Obelisk.Route.TH      (deriveRouteComponent)
+import           Text.Show             (Show)
+
+newtype PodcastIdentifier = PodcastIdentifier
+  { unPodcastIdentifier :: Text }
+  deriving (Generic)
+
+instance Wrapped PodcastIdentifier
 
 data BackendRoute :: * -> * where
   -- | Used to handle unparseable routes.
@@ -47,6 +61,8 @@ data FrontendRoute :: * -> * where
   FrontendRoute_Login    :: FrontendRoute ()
   FrontendRoute_AliasSelect :: FrontendRoute ()
   FrontendRoute_AliasRename :: FrontendRoute ()
+  FrontendRoute_Settings :: FrontendRoute ()
+  FrontendRoute_Podcast :: FrontendRoute PodcastIdentifier
 
 fullRouteEncoder
   :: Encoder (Either Text) Identity (R (FullRoute BackendRoute FrontendRoute)) PageName
@@ -63,6 +79,8 @@ fullRouteEncoder = mkFullRouteEncoder
       FrontendRoute_Login -> PathSegment "login" $ unitEncoder mempty
       FrontendRoute_AliasSelect -> PathSegment "alias-select" $ unitEncoder mempty
       FrontendRoute_AliasRename -> PathSegment "alias-rename" $ unitEncoder mempty
+      FrontendRoute_Settings -> PathSegment "settings" $ unitEncoder mempty
+      FrontendRoute_Podcast -> PathSegment "podcast" $ singlePathSegmentEncoder . unwrappedEncoder
   )
 
 concat <$> mapM deriveRouteComponent

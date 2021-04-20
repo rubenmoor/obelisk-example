@@ -1,5 +1,5 @@
-{-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE GADTs               #-}
 {-# LANGUAGE KindSignatures      #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE NoImplicitPrelude   #-}
@@ -15,31 +15,27 @@ module PagesUser
   , pageAliasRename
   ) where
 
-import           Clay                   (maxWidth, absolute, backgroundColor, border,
+import           Clay                   (absolute, backgroundColor, border,
                                          color, em, float, floatRight,
-                                         lightgrey, padding, position, px, red,
-                                         solid, white, width, zIndex)
-import           Client                 (getAliasAll, postAliasRename,
+                                         lightgrey, maxWidth, padding, position,
+                                         px, red, solid, white, zIndex)
+import           Client                 (getAuthData, getAliasAll, postAliasRename,
                                          postAliasSetDefault, postAuthNew,
                                          postAuthenticate, postDoesUserExist,
                                          request)
-import           Common.Auth            (CompactJWT, LoginData (..),
-                                         UserInfo (uiAlias), UserNew (..))
+import           Common.Auth            (LoginData (..), UserInfo (uiAlias),
+                                         UserNew (..))
 import           Control.Applicative    (Applicative (pure))
 import           Control.Category       (Category (id, (.)))
-import           Control.Monad          (Monad)
 import           Control.Monad.Fix      (MonadFix)
-import           Data.Bool              (bool, Bool (..), not)
+import           Control.Monad.Reader   (asks, MonadReader)
+import           Data.Bool              (Bool (..), bool, not)
 import           Data.Either            (Either (..), either)
-import           Data.Foldable          (forM_, traverse_)
-import           Data.Function          (const, ($), (&))
-import           Data.Functor           (Functor (fmap), void, ($>), (<$>))
-import           Data.List              (null)
+import           Data.Function          (($), (&))
+import           Data.Functor           (Functor(fmap), void, ($>), (<$>))
 import           Data.Maybe             (Maybe (Just, Nothing), maybe)
 import           Data.Semigroup         (Semigroup ((<>)))
-import           Data.Text              (Text)
 import           Data.Traversable       (forM)
-import           Data.Tuple             (fst, snd)
 import           Data.Witherable        (Filterable (catMaybes, mapMaybe),
                                          filter)
 import           MediaQuery             (onDesktopMaxWidth370px,
@@ -48,7 +44,7 @@ import           MediaQuery             (onDesktopMaxWidth370px,
 import           Model                  (Alias (aliasName))
 import           Obelisk.Route          (pattern (:/), R)
 import           Obelisk.Route.Frontend (RouteToUrl, SetRoute (..), routeLink)
-import           Reflex.Dom             (elementConfig_modifyAttributes, DomBuilder (inputElement),
+import           Reflex.Dom             (DomBuilder (inputElement),
                                          EventName (Click),
                                          EventWriter (tellEvent),
                                          HasDomEvent (domEvent),
@@ -56,23 +52,21 @@ import           Reflex.Dom             (elementConfig_modifyAttributes, DomBuil
                                          MonadHold (holdDyn),
                                          PostBuild (getPostBuild),
                                          Prerender (prerender),
-                                         Reflex (Dynamic, current, never, updated),
-                                         attachWith, blank, button,
-                                         constDyn, def, dyn, dyn_, el, el',
+                                         Reflex (Dynamic, never, updated),
+                                         blank, constDyn, def, dyn, dyn_, el,
                                          elAttr, elAttr',
-                                         elementConfig_initialAttributes, ffor,
+                                         elementConfig_modifyAttributes, ffor,
                                          inputElementConfig_elementConfig,
-                                         inputElementConfig_initialChecked,
                                          inputElementConfig_initialValue,
-                                         inputElementConfig_setChecked,
-                                         keypress, leftmost, prerender_,
-                                         switchHold, text, widgetHold_, zipDyn,
-                                         (.~), (=:))
+                                         keypress, leftmost, switchHold, text,
+                                         widgetHold_, zipDyn, (.~), (=:))
 import           Route                  (FrontendRoute (..))
 import           Servant.Common.Req     (reqFailure, reqSuccess)
-import           Shared                 (checkbox, btnSend, elLabelInput, iFa, style)
+import           Shared                 (btnSend, checkbox, elLabelInput, iFa,
+                                         style)
 import           State                  (EStateUpdate (..), Session (..),
                                          State (..))
+import Data.Tuple (snd)
 
 divOverlay
   :: forall t js (m :: * -> *) a.
@@ -169,25 +163,14 @@ pageLogin =
         loggedIn = catMaybes success
     tellEvent $ ffor loggedIn $ \(jwt, ui) ->
       EStateUpdate (\s -> s { stSession = SessionUser jwt ui })
-    dynEJwt <- holdDyn (Left "not logged in yet") $ Right . fst <$> loggedIn
-    dynEAlias <- holdDyn (Left "not logged in yet") $
-      Right . aliasName . uiAlias . snd <$> loggedIn
+    authData <- holdDyn (Left "not logged in yet") $ ffor loggedIn $ \(jwt, ui) ->
+      Right (jwt, aliasName $ uiAlias ui)
     respAliases <- mapMaybe reqSuccess <$>
-      request (getAliasAll dynEJwt dynEAlias $ void loggedIn)
+      request (getAliasAll authData $ void loggedIn)
     -- TODO: store current route in route /register/ to allow going back
     setRoute $ ffor respAliases $ \case
       [_] -> FrontendRoute_Main :/ ()
       _   -> FrontendRoute_AliasSelect :/ ()
-
-getESession :: Session -> Either Text (CompactJWT, UserInfo)
-getESession SessionAnon          = Left "not logged in"
-getESession (SessionUser jwt ui) = Right (jwt, ui)
-
-getEJwt :: Session -> Either Text CompactJWT
-getEJwt = fmap fst . getESession
-
-getEAlias  :: Session -> Either Text Text
-getEAlias = fmap (aliasName . uiAlias . snd) . getESession
 
 pageAliasSelect
   :: forall js t (m :: * -> *).
@@ -199,21 +182,21 @@ pageAliasSelect
   , Reflex t
   , RouteToUrl (R FrontendRoute) m
   , SetRoute t (R FrontendRoute) m
-  ) => Dynamic t Session -> m ()
-pageAliasSelect dynSession = do
+  , MonadReader (Dynamic t State) m
+  ) => m ()
+pageAliasSelect = do
   pb <- getPostBuild
-  let dynEJwt = getEJwt <$> dynSession
-      dynEAlias = getEAlias <$> dynSession
-      loading = do
+  let loading = do
         iFa "fas fa-spinner fa-spin"
         text " Loading ..."
       css = style $ do
         border solid (px 1) lightgrey
         padding (px 8) (px 8) (px 8) (px 8)
         maxWidth (em 32)
+  authData <- asks getAuthData
   divOverlay $ do
     eAliases <- mapMaybe reqSuccess <$>
-                request (getAliasAll dynEJwt dynEAlias pb)
+                request (getAliasAll authData pb)
     widgetHold_ loading $ ffor eAliases $ \as -> mdo
       el "h2" $ text "Select alias"
       es <- forM as $ \alias -> do
@@ -223,7 +206,7 @@ pageAliasSelect dynSession = do
         eEDone <- dyn $ ffor dynCbChecked $ \checked ->
           if checked
             then mapMaybe reqSuccess <$>
-                   request (postAliasSetDefault dynEJwt dynEAlias dynAlias eClick)
+                   request (postAliasSetDefault authData dynAlias eClick)
             else pure eClick
         switchHold never eEDone
       dynCbChecked <- checkbox True "Make default"
@@ -236,10 +219,11 @@ pageAliasRename
   , Prerender js t m
   , RouteToUrl (R FrontendRoute) m
   , SetRoute t (R FrontendRoute) m
-  ) => Dynamic t Session -> m ()
-pageAliasRename dynSession = do
-  let dynEJwt = getEJwt <$> dynSession
-      dynEAlias = getEAlias <$> dynSession
+  , MonadReader (Dynamic t State) m
+  ) => m ()
+pageAliasRename = do
+  authData <- asks getAuthData
+  let dynEAlias = fmap (fmap snd) authData
   divOverlay $
     dyn_ $ ffor dynEAlias $ either text $ \alias -> do
       let conf = def
@@ -248,6 +232,6 @@ pageAliasRename dynSession = do
       eSend <- btnSend $ text "send"
       let eEnter = keypress Enter i
           eNew = maybe (Left "alias cannot be empty") Right <$> mNew
-      resp <- request (postAliasRename dynEJwt dynEAlias eNew $ leftmost [eSend, eEnter])
+      resp <- request (postAliasRename authData eNew $ leftmost [eSend, eEnter])
       let success = mapMaybe reqSuccess resp
       setRoute $ success $> FrontendRoute_Main :/ ()

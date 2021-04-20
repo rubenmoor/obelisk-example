@@ -30,6 +30,7 @@ library
       Frontend
   other-modules:
       Client
+    , PagesPodcast
     , PagesUser
     , MediaQuery
     , Shared

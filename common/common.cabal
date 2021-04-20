@@ -10,10 +10,13 @@ library
     , aeson
     , bytestring
     , containers
+    , either
     , gerippe
     , http-api-data
     , http-media
+    , lens
     , obelisk-route
+    , modern-uri
     , mtl
     , password
     , password-instances

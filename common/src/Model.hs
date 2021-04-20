@@ -26,13 +26,13 @@ import           Data.Text               (Text)
 import           Data.Time               (Day, UTCTime)
 import           Database.Persist.TH     (mkMigrate, mkPersist,
                                           persistLowerCase, share, sqlSettings)
-
+import Text.URI (URI)
 import           Data.Password.Argon2    (Argon2, PasswordHash)
 import           Data.Password.Instances ()
 import           Database.Gerippe        (PersistEntity (EntityField, Unique))
 import           GHC.Generics            (Generic)
 import           Model.Custom            (Event (..), Rank (..), Subject (..),
-                                          Visibility (..))
+                                          Visibility (..), PlatformName)
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Podcast
@@ -49,6 +49,10 @@ Podcast
   authors          Text
   itunesOwnerNames Text
   keywords         Text
+  deriving Generic
+Platform
+  name             PlatformName
+  link             URI
 Episode
   fkPodcast        PodcastId
   title            Text
@@ -101,3 +105,6 @@ EventSource
 
 instance FromJSON Alias
 instance ToJSON Alias
+
+instance FromJSON Podcast
+instance ToJSON Podcast

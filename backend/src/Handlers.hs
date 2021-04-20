@@ -85,6 +85,7 @@ import           Text.Blaze.Renderer.Utf8  (renderMarkup)
 import           Text.Heterocephalus       (compileHtmlFile)
 import           Text.Show                 (Show (show))
 import System.IO (print)
+import Data.Char (isAlphaNum)
 
 default(Text)
 
@@ -143,6 +144,9 @@ handlers =
     :<|> handleDoesUserExist
         )
   :<|> handleEpisodeNew
+  :<|>  (handlePodcastNew
+    :<|> handlePodcastGet
+        )
   :<|>  (handleAliasRename
     :<|> handleAliasGetAll
     :<|> handleAliasSetDefault
@@ -272,6 +276,8 @@ handleUserNew UserNew{..} = do
     throwError $ err400 { errBody = "User name max length: 64 characters" }
   when (Text.length unPassword > 64) $
     throwError $ err400 { errBody = "Password max length: 64 characters" }
+  unless (Text.all isAlphaNum unUserName) $
+    throwError $ err400 { errBody = "user name may only contain alpha-numeric characaters" }
   uiIsSiteAdmin <- runDb $ (null :: [Entity User] -> Bool) <$> getAll
   eventSourceId <- runDb $ insert EventSource
   user <- runDb $ insert $ User unUserName uiIsSiteAdmin eventSourceId Nothing
@@ -359,7 +365,18 @@ handleAliasRename :: UserInfo -> Text -> Handler ()
 handleAliasRename UserInfo{..} new = do
   when (Text.length new > 16) $
     throwError $ err400 { errBody = "alias max length is 16 characters" }
+  now <- liftIO getCurrentTime
   runDb $ update uiKeyAlias [ AliasName =. new ]
+  eventSourceId <- runDb (getBy $ UUserName uiUserName) >>=
+    maybe (throwError $ err400 { errBody = "user not found"})
+          (pure . userFkEventSource . entityVal)
+  let journalFkEventSource = eventSourceId
+      journalFkAlias = Just uiKeyAlias
+      journalCreated = now
+      journalEvent = EventEdit
+      journalDescription = "Old alias: " <> aliasName uiAlias
+      journalSubject = SubjectAlias
+  runDb $ insert_ Journal{..}
 
 handleAliasGetAll :: UserInfo -> Handler [Text]
 handleAliasGetAll UserInfo{..} = do
@@ -379,3 +396,35 @@ handleAliasSetDefault UserInfo{..} aliasName = do
     >>= maybe (throwError $ err500 { errBody = "user not found" })
               (pure . entityKey)
   runDb $ update keyUser [ UserFkDefaultAlias =. Just keyAlias ]
+
+handlePodcastNew :: UserInfo -> Text -> Handler ()
+handlePodcastNew UserInfo{..} podcastIdentifier = do
+  unless uiIsSiteAdmin $ throwError err500
+  unless (Text.all isAlphaNum podcastIdentifier) $
+    throwError $ err400 { errBody = "only alpha-numeric characters permitted" }
+  now <- liftIO getCurrentTime
+  let podcastTitle = ""
+      podcastDescription = ""
+      podcastCopyright = ""
+      podcastEmail = ""
+      podcastLicence = ""
+      podcastPubDate = now
+      podcastItunesSubtitle = ""
+      podcastItunesSummary = ""
+      podcastAuthors = ""
+      podcastItunesOwnerNames = ""
+      podcastKeywords = ""
+  runDb $ insert_ Podcast{..}
+  eventSourceId <- runDb $ insert EventSource
+  let journalFkEventSource = eventSourceId
+      journalFkAlias = Just uiKeyAlias
+      journalCreated = now
+      journalEvent = EventCreation
+      journalDescription = ""
+      journalSubject = SubjectPodcast
+  runDb $ insert_ Journal{..}
+
+handlePodcastGet :: Text -> Handler Podcast
+handlePodcastGet podcastIdentifier =
+  runDb (getBy $ UPodcastIdentifier podcastIdentifier)
+    >>= maybe (throwError err404) (pure . entityVal)

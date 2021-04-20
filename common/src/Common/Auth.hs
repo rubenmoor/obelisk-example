@@ -34,7 +34,7 @@ import           Data.Typeable           (Typeable)
 import           Database.Gerippe        (PersistEntity (Key))
 import           GHC.Generics            (Generic)
 import           Model                   (Alias, Rank)
-import           Reflex.Dom              (Reflex (Dynamic))
+import           Reflex.Dom              (splitDynPure, Reflex (Dynamic))
 import           Servant                 (HasContextEntry (getContextEntry))
 import           Servant.API             ((:>))
 import           Servant.Common.Req      (addHeader)
@@ -82,13 +82,15 @@ instance (HasClient t m api tag, Reflex t)
       => HasClient t m (AuthProtect realm :> api) tag where
 
   type Client t m (AuthProtect realm :> api) tag =
-       Dynamic t (Either Text CompactJWT)
-    -> Dynamic t (Either Text Text)
+       Dynamic t (Either Text (CompactJWT, Text))
     -> Client t m api tag
 
-  clientWithRouteAndResultHandler Proxy q t req baseurl opts wrap token alias =
+  clientWithRouteAndResultHandler Proxy q t req baseurl opts wrap authData =
     clientWithRouteAndResultHandler (Proxy :: Proxy api) q t req' baseurl opts wrap
       where
+        switchEither (Left str) = (Left str, Left str)
+        switchEither (Right (x, y)) = (Right x, Right y)
+        (token, alias) = splitDynPure $ switchEither <$> authData
         req' = addHeader "Authorization" token $
                addHeader "X-Alias" alias req
 
