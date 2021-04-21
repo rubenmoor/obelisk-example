@@ -29,7 +29,7 @@ import           Database.Persist.TH     (mkMigrate, mkPersist,
 import Text.URI (URI)
 import           Data.Password.Argon2    (Argon2, PasswordHash)
 import           Data.Password.Instances ()
-import           Database.Gerippe        (PersistEntity (EntityField, Unique))
+import           Database.Persist.Class  (PersistEntity (EntityField, Unique))
 import           GHC.Generics            (Generic)
 import           Model.Custom            (Event (..), Rank (..), Subject (..),
                                           Visibility (..), PlatformName)

@@ -11,7 +11,6 @@ library
     , bytestring
     , containers
     , either
-    , gerippe
     , http-api-data
     , http-media
     , lens
@@ -20,6 +19,7 @@ library
     , mtl
     , password
     , password-instances
+    , persistent
     , persistent-template
     , reflex-dom
     , servant
