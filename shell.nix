@@ -1,12 +1,12 @@
 { system ? builtins.currentSystem
 , pkgs ? import <nixpkgs> {}
 , obelisk ? import ./.obelisk/impl {
-    # reflex-platform-func = args@{ ... }: import ../reflex-platform (args // {
-    #     inherit system;
-    #     # activate haskell-language-server for reflex-platform with full
-    #     # support for template-haskell
-    #     hlsSupport = true;
-    # });
+    reflex-platform-func = args@{ ... }: import ../reflex-platform (args // {
+        inherit system;
+        # activate haskell-language-server for reflex-platform with full
+        # support for template-haskell
+        hlsSupport = true;
+    });
     inherit system;
     iosSdkVersion = "13.2";
 
