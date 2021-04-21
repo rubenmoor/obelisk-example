@@ -3,7 +3,7 @@
 
 module State where
 
-import           Common.Auth      (CompactJWT, SessionData)
+import           Common.Auth      (SessionData)
 import           Control.Category (Category ((.)))
 import           Data.Aeson       (FromJSON, ToJSON)
 import           Data.Default     (Default (..))

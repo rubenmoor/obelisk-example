@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE KindSignatures      #-}
@@ -23,7 +24,7 @@ import           Client                 (getAuthData, getAliasAll, postAliasRena
                                          postAliasSetDefault, postAuthNew,
                                          postAuthenticate, postDoesUserExist,
                                          request)
-import           Common.Auth            (LoginData (..), UserInfo (uiAlias),
+import           Common.Auth            (LoginData (..), SessionData (..),
                                          UserNew (..))
 import           Control.Applicative    (Applicative (pure))
 import           Control.Category       (Category (id, (.)))
@@ -41,7 +42,6 @@ import           Data.Witherable        (Filterable (catMaybes, mapMaybe),
 import           MediaQuery             (onDesktopMaxWidth370px,
                                          onDesktopMkOverlay, onMobileMkOverlay,
                                          respClass, respClasses)
-import           Model                  (Alias (aliasName))
 import           Obelisk.Route          (pattern (:/), R)
 import           Obelisk.Route.Frontend (RouteToUrl, SetRoute (..), routeLink)
 import           Reflex.Dom             (DomBuilder (inputElement),
@@ -131,8 +131,8 @@ pageRegister =
           _                     -> Left "all fields are required"
     response <- request $ postAuthNew eUserNew eSend
     let success = mapMaybe reqSuccess response
-    tellEvent $ ffor success $ \(jwt, ui) ->
-      EStateUpdate (\s -> s { stSession = SessionUser jwt ui })
+    tellEvent $ ffor success $ \sd ->
+      EStateUpdate (\s -> s { stSession = SessionUser sd })
     -- TODO: store current route in route /register/ to allow going back
     setRoute $ success $> FrontendRoute_AliasRename :/ ()
 
@@ -161,10 +161,10 @@ pageLogin =
     response <- request $ postAuthenticate eLoginData $ leftmost [eSend, eEnter]
     let success = mapMaybe reqSuccess response
         loggedIn = catMaybes success
-    tellEvent $ ffor loggedIn $ \(jwt, ui) ->
-      EStateUpdate (\s -> s { stSession = SessionUser jwt ui })
-    authData <- holdDyn (Left "not logged in yet") $ ffor loggedIn $ \(jwt, ui) ->
-      Right (jwt, aliasName $ uiAlias ui)
+    tellEvent $ ffor loggedIn $ \sd ->
+      EStateUpdate (\s -> s { stSession = SessionUser sd })
+    authData <- holdDyn (Left "not logged in yet") $ ffor loggedIn $ \SessionData{..} ->
+      Right (sdJwt, sdAliasName)
     respAliases <- mapMaybe reqSuccess <$>
       request (getAliasAll authData $ void loggedIn)
     -- TODO: store current route in route /register/ to allow going back
@@ -179,7 +179,6 @@ pageAliasSelect
   , MonadHold t m
   , PostBuild t m
   , Prerender js t m
-  , Reflex t
   , RouteToUrl (R FrontendRoute) m
   , SetRoute t (R FrontendRoute) m
   , MonadReader (Dynamic t State) m

@@ -10,16 +10,12 @@ library
     , aeson
     , bytestring
     , containers
-    , either
     , http-api-data
     , http-media
     , lens
     , obelisk-route
     , modern-uri
     , mtl
-    , password
-    , password-instances
-    , persistent-template
     , reflex-dom
     , servant
     , servant-reflex

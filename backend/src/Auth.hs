@@ -40,7 +40,8 @@ import qualified Data.Text.Encoding   as Text
 import           Data.Time            (UTCTime, addUTCTime)
 import           Database.Gerippe     (Key)
 import           GHC.Generics         (Generic)
-import           Model                (Alias (..), Rank)
+import           Model                (Rank)
+import DbAdapter (Alias (..))
 
 audience :: StringOrURI
 audience = "https://www.serendipity.works"

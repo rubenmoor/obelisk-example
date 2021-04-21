@@ -16,18 +16,15 @@
 
 module DbAdapter where
 
-import           Data.Aeson              (FromJSON, ToJSON)
-import           Data.Text               (Text)
-import           Data.Time               (Day, UTCTime)
-import Data.ByteString (ByteString)
-import           Database.Persist.TH     (mkMigrate, mkPersist,
-                                          persistLowerCase, share, sqlSettings)
-import Text.URI (URI)
+import           Data.ByteString         (ByteString)
+import           Data.Function           (on)
 import           Data.Password.Argon2    (Argon2, PasswordHash)
 import           Data.Password.Instances ()
-import           Database.Gerippe        (PersistEntity (EntityField, Unique))
-import           GHC.Generics            (Generic)
-import qualified Model as Model
+import           Data.Text               (Text)
+import           Database.Persist.TH     (mkMigrate, mkPersist,
+                                          persistLowerCase, share, sqlSettings)
+import DbAdapter.Instances ()
+import qualified Model
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Podcast
@@ -38,9 +35,9 @@ Platform
   blob             ByteString
   fkPodcast        PodcastId
 Episode
-  fkPodcast        PodcastId
   slug             Text
   blob             ByteString
+  fkPodcast        PodcastId
   fkEventSource    EventSourceId
 User                             -- some real person
   name             Text
@@ -67,3 +64,9 @@ Journal
   fkAlias          AliasId Maybe
 EventSource
 |]
+
+instance Eq Podcast where
+  (==) = on (==) podcastIdentifier
+
+instance Ord Podcast where
+  compare = on compare podcastIdentifier

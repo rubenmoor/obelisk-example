@@ -18,21 +18,22 @@ module Handlers
 
 import           AppData                   (DbAction, EnvApplication (..),
                                             Handler)
-import           Auth                      (mkClaims, mkCompactJWT,
-                                            verifyCompactJWT, UserInfo (..))
+import           Auth                      (UserInfo (..), mkClaims,
+                                            mkCompactJWT, verifyCompactJWT)
 import           Common                    (EpisodeNew (..), RoutesApi,
                                             convertToFilename, formatDuration)
-import           Common.Auth               (CompactJWT, LoginData (..),
+import           Common.Auth               (LoginData (..), SessionData (..),
                                             UserNew (..))
 import           Control.Applicative       (Applicative (pure))
 import           Control.Category          (Category ((.)))
-import           Control.Exception.Lifted  (SomeException, catch, evaluate)
+import           Control.Exception.Lifted  (catch, evaluate)
 import           Control.Monad             (Monad ((>>=)), unless, when)
 import           Control.Monad.Except      (runExceptT)
 import           Control.Monad.IO.Class    (MonadIO (liftIO))
 import           Control.Monad.Reader      (asks)
 import           Control.Monad.Trans       (MonadTrans (lift))
 import           Crypto.JWT                (JWK)
+import           Data.Aeson                (decodeStrict, encode)
 import           Data.Bool                 (Bool (..))
 import qualified Data.ByteString.Lazy      as Lazy
 import qualified Data.ByteString.Lazy.UTF8 as BSU
@@ -40,10 +41,11 @@ import           Data.Char                 (isAlphaNum)
 import           Data.Either               (either)
 import           Data.Eq                   (Eq ((==)))
 import           Data.FileEmbed            (makeRelativeToProject)
+import           Data.Foldable             (Foldable (foldl'))
 import           Data.Function             (flip, ($))
-import           Data.Functor
+import           Data.Functor              (Functor (fmap), (<$>))
 import           Data.Int                  (Int)
-import           Data.List                 ((++), map, null, sortOn)
+import           Data.List                 (null, sortOn, (++))
 import           Data.Map                  (Map)
 import qualified Data.Map                  as Map
 import           Data.Maybe                (Maybe (Just, Nothing), isJust,
@@ -54,32 +56,31 @@ import           Data.Password             (mkPassword)
 import           Data.Password.Argon2      (PasswordCheck (..), checkPassword,
                                             hashPassword)
 import           Data.Pool                 (Pool)
-import           Data.String               (String)
 import           Data.Text                 (Text, breakOn, drop, replace,
                                             toUpper)
 import qualified Data.Text                 as Text
 import           Data.Time                 (defaultTimeLocale, formatTime,
                                             getCurrentTime, parseTimeM)
+import           Data.Traversable          (traverse)
 import           Data.Tuple                (snd)
 import           Database.Gerippe          (Entity (..), InnerJoin (..), Key,
                                             PersistStoreWrite (insert, insert_),
                                             PersistUniqueRead (getBy),
                                             PersistentSqlException, from, get,
-                                            getAll, getWhere, join1ToMWhere,
-                                            join1ToMWhere', joinMTo1Where,
-                                            joinMTo1Where', on, select, val,
-                                            where_, (&&.), (==.), (^.))
+                                            getAll, getWhere, joinMTo1Where',
+                                            on, select, val, where_, (&&.),
+                                            (==.), (^.))
 import           Database.Persist.MySQL    (PersistStoreWrite (update),
                                             SqlBackend, runSqlPool, (=.))
-import           Model                     (Alias (..), AuthPwd (..),
+import           DbAdapter                 (Alias (..), AuthPwd (..),
                                             Clearance (..), EntityField (..),
-                                            Episode (..), Event (..),
-                                            EventSource (..), Journal (..),
-                                            Platform (..), Podcast (..),
-                                            Rank (RankModerator), Subject (..),
-                                            User (..),
-                                            Visibility (..))
-import DbAdapter (Unique (..) )
+                                            EventSource (..), Unique (..),
+                                            User (..))
+import qualified DbAdapter                 as Db
+import           Model                     (Episode (..), Event (..),
+                                            Journal (..), Platform (..),
+                                            Podcast (..), Rank (RankModerator),
+                                            Subject (..), Visibility (..))
 import           Safe                      (headMay)
 import           Servant.API               ((:<|>) (..),
                                             FromHttpApiData (parseHeader))
@@ -88,11 +89,9 @@ import           Servant.Server            (Context ((:.), EmptyContext),
                                             ServantErr (errBody), err400,
                                             err403, err404, err500, throwError)
 import           Snap.Core                 (Snap, getHeader, getRequest)
-import           System.IO                 (print)
 import           Text.Blaze.Renderer.Utf8  (renderMarkup)
 import           Text.Heterocephalus       (compileHtmlFile)
 import           Text.Show                 (Show (show))
-import Data.Foldable (Foldable(foldl'))
 
 default(Text)
 
@@ -103,7 +102,7 @@ getClearances keyAlias = do
                    ClearanceFkAlias keyAlias
   let for = flip fmap
   pure $ Map.fromList $ for clearances $
-    \(Entity _ Clearance{..}, Entity _ Podcast{..}) ->
+    \(Entity _ Clearance{..}, Entity _ Db.Podcast{..}) ->
       (podcastIdentifier, clearanceRank)
 
 mkContext :: JWK -> Pool SqlBackend -> Context '[Snap UserInfo]
@@ -138,7 +137,7 @@ mkContext jwk pool =
           joinMTo1Where' ClearanceFkPodcast PodcastId
                          ClearanceFkAlias uiKeyAlias
         let uiClearances = Map.fromList $
-              for clearances $ \(Entity _ Clearance{..}, Entity _ Podcast{..}) ->
+              for clearances $ \(Entity _ Clearance{..}, Entity _ Db.Podcast{..}) ->
                 (podcastIdentifier, clearanceRank)
         pure $ UserInfo{..}
   in  authHandler :. EmptyContext
@@ -171,14 +170,19 @@ runDb' pool action =
 
 handleFeedXML :: Text -> Handler Lazy.ByteString
 handleFeedXML podcastId = do
-  mShow <- runDb $ getBy $ UPodcastIdentifier podcastId
-  theShow <- maybe (throwError err404) pure mShow
-  let Entity key Podcast{..} = theShow
-  episodeList <- runDb $ map entityVal <$> getWhere EpisodeFkPodcast key
+  Entity key dbPodcast <- runDb (getBy $ UPodcastIdentifier podcastId)
+    >>= maybe (throwError err404) pure
+  Podcast{..} <- maybe (throwError $ err500 { errBody = "could not decode podcast blob" })
+                       pure $ decodeStrict (Db.podcastBlob dbPodcast)
+  ls <- runDb (getWhere EpisodeFkPodcast key)
+  let mEpisodeList = traverse (decodeStrict . Db.episodeBlob . entityVal) ls
+  episodeList <- maybe (throwError $ err500 { errBody = "Could not decode episode blob" })
+                       pure
+                       mEpisodeList
   url <- asks envUrl
   -- TODO: podcastLicence: https://creativecommons.org/licenses/by-nc-nd/4.0/
   -- TODO: podcastKeywords: Philosophie, Moral, Kolumbien
-  let podcastUrl = url <> "/" <> podcastId
+  let podcastUrl = url <> "/show/" <> podcastId
       imgUrl = podcastUrl <> "/podcast-logo.jpg"
       pubDate = toRfc822 podcastPubDate
       episodeData = getEpisodeFeedData url <$>
@@ -235,7 +239,7 @@ data EpisodeFeedData = EpisodeFeedData
     }
 
 
-handleGrantAuthPwd :: LoginData -> Handler (Maybe (CompactJWT, UserInfo))
+handleGrantAuthPwd :: LoginData -> Handler (Maybe SessionData)
 handleGrantAuthPwd LoginData{..} = do
   mUser <- runDb (getBy $ UUserName ldUserName)
   Entity keyUser User{..} <- maybe
@@ -245,7 +249,7 @@ handleGrantAuthPwd LoginData{..} = do
   Entity _ AuthPwd{..} <- maybe
     (throwError $ err400 { errBody = "not registered with password"})
     pure mAuth
-  Entity uiKeyAlias uiAlias <- case userFkDefaultAlias of
+  Entity keyAlias alias <- case userFkDefaultAlias of
     Just key -> runDb (get key) >>= \case
       Just alias -> pure $ Entity key alias
       Nothing    -> throwError $ err500 { errBody = "alias not found" }
@@ -255,26 +259,25 @@ handleGrantAuthPwd LoginData{..} = do
   case checkPassword (mkPassword ldPassword) authPwdPassword of
     PasswordCheckSuccess -> do
       now <- liftIO getCurrentTime
-      runDb $ insert_ $
-        let journalFkAlias = Just uiKeyAlias
-            journalCreated = now
-            journalEvent = EventLogin
-            journalDescription = ""
-            journalSubject = SubjectUser
-            journalFkEventSource = userFkEventSource
-        in  Journal{..}
+      let journalCreated = now
+          journalEvent = EventLogin
+          journalDescription = ""
+          journalSubject = SubjectUser
+          blob = Lazy.toStrict $ encode Journal{..}
+      runDb $ insert_ $ Db.Journal blob userFkEventSource $ Just keyAlias
       let claims = mkClaims now ldUserName
       jwk <- asks envJwk
-      eJwt <- liftIO $ runExceptT $ mkCompactJWT jwk claims
-      uiClearances <- getClearances uiKeyAlias
-      let uiIsSiteAdmin = userIsSiteAdmin
-          uiUserName = userName
-      let ui = UserInfo{..}
       let toServerError e = throwError $ err500 { errBody = BSU.fromString $ show e}
-      either toServerError (\jwt -> pure $ Just (jwt, ui)) eJwt
+      sdJwt <- liftIO (runExceptT $ mkCompactJWT jwk claims)
+        >>= either toServerError pure
+      sdClearances <- getClearances keyAlias
+      let sdIsSiteAdmin = userIsSiteAdmin
+          sdUserName = userName
+          sdAliasName = aliasName alias
+      pure $ Just SessionData{..}
     PasswordCheckFail    -> pure Nothing
 
-handleUserNew :: UserNew -> Handler (CompactJWT, UserInfo)
+handleUserNew :: UserNew -> Handler SessionData
 handleUserNew UserNew{..} = do
   when (Text.null unPassword) $
     throwError $ err400 { errBody = "Password cannot be empty" }
@@ -284,39 +287,37 @@ handleUserNew UserNew{..} = do
     throwError $ err400 { errBody = "Password max length: 64 characters" }
   unless (Text.all isAlphaNum unUserName) $
     throwError $ err400 { errBody = "user name may only contain alpha-numeric characaters" }
-  uiIsSiteAdmin <- runDb $ (null :: [Entity User] -> Bool) <$> getAll
+  sdIsSiteAdmin <- runDb $ (null :: [Entity User] -> Bool) <$> getAll
   eventSourceId <- runDb $ insert EventSource
-  user <- runDb $ insert $ User unUserName uiIsSiteAdmin eventSourceId Nothing
+  user <- runDb $ insert $ User unUserName sdIsSiteAdmin eventSourceId Nothing
   password <- hashPassword (mkPassword unPassword)
   runDb $ insert_ $ AuthPwd user password
-  let uiAlias = Alias (Text.take 16 unUserName) user
-  uiKeyAlias <- runDb $ insert uiAlias
-  runDb $ update user [ UserFkDefaultAlias =. Just uiKeyAlias ]
+  let sdAliasName = Text.take 16 unUserName
+  keyAlias <- runDb $ insert $ Alias sdAliasName user
+  runDb $ update user [ UserFkDefaultAlias =. Just keyAlias ]
   now <- liftIO getCurrentTime
-  runDb $ insert_ $
-    let journalFkAlias = Nothing
-        journalCreated = now
-        journalEvent = EventCreation
-        journalDescription = ""
-        journalSubject = SubjectUser
-        journalFkEventSource = eventSourceId
-    in  Journal{..}
-  runDb $ insert_ $
-    let journalFkAlias = Nothing
-        journalCreated = now
-        journalEvent = EventCreation
-        journalDescription = ""
-        journalSubject = SubjectAlias
-        journalFkEventSource = eventSourceId
-    in  Journal{..}
-  let claims = mkClaims now unUserName
+  let blobJournalUser =
+        let journalCreated = now
+            journalEvent = EventCreation
+            journalDescription = ""
+            journalSubject = SubjectUser
+        in  Lazy.toStrict $ encode Journal{..}
+  runDb $ insert_ $ Db.Journal blobJournalUser eventSourceId Nothing
+  let blobJournalAlias =
+        let journalCreated = now
+            journalEvent = EventCreation
+            journalDescription = ""
+            journalSubject = SubjectAlias
+        in  Lazy.toStrict $ encode Journal{..}
+  runDb $ insert_ $ Db.Journal blobJournalAlias eventSourceId Nothing
   jwk <- asks envJwk
-  eJwt <- liftIO $ runExceptT $ mkCompactJWT jwk claims
-  uiClearances <- getClearances uiKeyAlias
-  let uiUserName = unUserName
-  let ui = UserInfo{..}
-  let toServerError e = throwError $ err500 { errBody = BSU.fromString $ show e}
-  either toServerError (pure . (, ui)) eJwt
+  let claims = mkClaims now unUserName
+      toServerError e = throwError $ err500 { errBody = BSU.fromString $ show e}
+  sdJwt <- liftIO (runExceptT $ mkCompactJWT jwk claims)
+    >>= either toServerError pure
+  sdClearances <- getClearances keyAlias
+  let sdUserName = unUserName
+  pure SessionData{..}
 
 handleDoesUserExist :: Text -> Handler Bool
 handleDoesUserExist str = runDb $ isJust <$> getBy (UUserName str)
@@ -331,8 +332,8 @@ checkClearance UserInfo{..} theShow minRank =
 handleEpisodeNew :: Text -> UserInfo -> EpisodeNew -> Handler ()
 handleEpisodeNew theShow ui@UserInfo{..} EpisodeNew{..} = do
   mShow <- runDb $ getBy $ UPodcastIdentifier theShow
-  episodeFkPodcast <- maybe (throwError $ err500 { errBody = "show not found" })
-                            (pure . entityKey) mShow
+  fkPodcast <- maybe (throwError $ err500 { errBody = "show not found" })
+                     (pure . entityKey) mShow
   checkClearance ui theShow RankModerator
   let Alias{..} = uiAlias
   now <- liftIO getCurrentTime
@@ -357,15 +358,14 @@ handleEpisodeNew theShow ui@UserInfo{..} EpisodeNew{..} = do
       episodeFileSize = 0
       episodeVideoUrl = ""
       episodeVisibility = VisibilityHidden
-      episodeFkEventSource = eventSourceId
-  runDb $ insert_ Episode{..}
-  let journalFkEventSource = eventSourceId
-      journalFkAlias = Just uiKeyAlias
-      journalCreated = now
+      episodeBlob = Lazy.toStrict $ encode Episode{..}
+  runDb $ insert_ $ Db.Episode episodeSlug episodeBlob fkPodcast eventSourceId
+  let journalCreated = now
       journalEvent = EventCreation
       journalDescription = ""
       journalSubject = SubjectEpisode
-  runDb $ insert_ Journal{..}
+      journalBlob = Lazy.toStrict $ encode Journal{..}
+  runDb $ insert_ $ Db.Journal journalBlob eventSourceId $ Just uiKeyAlias
 
 handleAliasRename :: UserInfo -> Text -> Handler ()
 handleAliasRename UserInfo{..} new = do
@@ -376,13 +376,12 @@ handleAliasRename UserInfo{..} new = do
   eventSourceId <- runDb (getBy $ UUserName uiUserName) >>=
     maybe (throwError $ err400 { errBody = "user not found"})
           (pure . userFkEventSource . entityVal)
-  let journalFkEventSource = eventSourceId
-      journalFkAlias = Just uiKeyAlias
-      journalCreated = now
+  let journalCreated = now
       journalEvent = EventEdit
       journalDescription = "Old alias: " <> aliasName uiAlias
       journalSubject = SubjectAlias
-  runDb $ insert_ Journal{..}
+      journalBlob = Lazy.toStrict $ encode Journal{..}
+  runDb $ insert_ $ Db.Journal journalBlob eventSourceId $ Just uiKeyAlias
 
 handleAliasGetAll :: UserInfo -> Handler [Text]
 handleAliasGetAll UserInfo{..} = do
@@ -420,15 +419,15 @@ handlePodcastNew UserInfo{..} podcastIdentifier = do
       podcastAuthors = ""
       podcastItunesOwnerNames = ""
       podcastKeywords = ""
-  runDb $ insert_ Podcast{..}
+      podcastBlob = Lazy.toStrict $ encode Podcast{..}
+  runDb $ insert_ $ Db.Podcast podcastIdentifier podcastBlob
   eventSourceId <- runDb $ insert EventSource
-  let journalFkEventSource = eventSourceId
-      journalFkAlias = Just uiKeyAlias
-      journalCreated = now
+  let journalCreated = now
       journalEvent = EventCreation
       journalDescription = ""
       journalSubject = SubjectPodcast
-  runDb $ insert_ Journal{..}
+      journalBlob = Lazy.toStrict $ encode Journal{..}
+  runDb $ insert_ $ Db.Journal journalBlob eventSourceId $ Just uiKeyAlias
 
 handlePodcastGet :: Text -> Handler (Podcast, [Platform], [Episode])
 handlePodcastGet podcastIdentifier = do
@@ -442,5 +441,13 @@ handlePodcastGet podcastIdentifier = do
       m = foldl' acc  Map.empty ls
   case Map.toList m of
     []                    -> throwError err404
-    [(podcast, (ps, es))] -> pure (entityVal podcast, entityVal <$> ps, entityVal <$> es)
     _:_:_                 -> throwError $ err500 { errBody = "podcast id not unique" }
+    [(podcast, (platforms, episodes))] ->
+      let mPodcast = do
+            p <- decodeStrict $ Db.podcastBlob $ entityVal podcast
+            ps <- traverse (decodeStrict . Db.platformBlob . entityVal) platforms
+            es <- traverse (decodeStrict . Db.episodeBlob . entityVal) episodes
+            pure (p, ps, es)
+      in  maybe (throwError $ err500 { errBody = "Could not decode blobs" })
+                pure
+                mPodcast

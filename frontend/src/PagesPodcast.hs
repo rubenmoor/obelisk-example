@@ -14,7 +14,7 @@ module PagesPodcast
   ) where
 
 import           Client                   (getPodcast, request)
-import           Common.Auth              (UserInfo (..))
+import           Common.Auth              (SessionData (..))
 import           Control.Monad            (forM_)
 import           Control.Monad.Fix        (MonadFix)
 import           Control.Monad.Reader     (MonadReader, asks)
@@ -25,7 +25,7 @@ import           Data.Int                 (Int)
 import qualified Data.Map                 as Map
 import           Data.Maybe               (Maybe (Just))
 import           Data.Monoid              (Monoid (mempty))
-import           Data.Ord                 (Ord((<), (>=)))
+import           Data.Ord                 (Ord ((<), (>=)))
 import           Data.Semigroup           (Semigroup ((<>)))
 import           Data.Text                (Text, toLower)
 import qualified Data.Text                as Text
@@ -35,8 +35,8 @@ import           Data.Witherable          (Filterable (mapMaybe))
 import           GHC.Num                  (Num ((*)))
 import           GHC.Real                 (Integral (div, mod))
 import           Model                    (Episode (..), Platform (..),
-                                           Podcast (..), Rank (..))
-import           Model.Custom             (PlatformName (..))
+                                           PlatformName (..), Podcast (..),
+                                           Rank (..))
 import           Obelisk.Generated.Static (static)
 import           Obelisk.Route.Frontend   (R, RouteToUrl, Routed (askRoute),
                                            RoutedT, SetRoute)
@@ -52,9 +52,9 @@ import           Shared                   (iFa)
 import           State                    (EStateUpdate, Session (..),
                                            State (..))
 import           Text.Printf              (printf)
-import           Text.RawString.QQ
+import           Text.RawString.QQ        (r)
+import           Text.Regex.TDFA          ((=~))
 import qualified Text.URI                 as URI
-import Text.Regex.TDFA ((=~))
 
 pagePodcastView
   :: forall t js (m :: * -> *).
@@ -74,9 +74,9 @@ pagePodcastView = do
   dynSession <- asks $ fmap stSession
   dyn_ $ ffor (zipDyn dynSession dynPodcastId) $ \case
     (SessionAnon, _) -> blank
-    (SessionUser _ UserInfo{..}, pId) -> case Map.lookup pId uiClearances of
-      Just r | r >= RankAdmin -> iFa "fas fa-edit"
-      _                       -> blank
+    (SessionUser SessionData{..}, pId) -> case Map.lookup pId sdClearances of
+      Just rank | rank >= RankAdmin -> iFa "fas fa-edit"
+      _                             -> blank
   ePb <- getPostBuild
   ePodcast <- mapMaybe reqSuccess <$>
     request (getPodcast (Right <$> dynPodcastId) ePb)

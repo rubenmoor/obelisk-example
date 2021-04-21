@@ -17,6 +17,7 @@ library
     , containers
     , data-default
     , directory
+    , either
     , jose
     , frontend
     , file-embed
@@ -33,8 +34,10 @@ library
     , obelisk-executable-config-lookup
     , obelisk-route
     , password
+    , password-instances
     , persistent
     , persistent-mysql
+    , persistent-template
     , resource-pool
     , resourcet
     , safe

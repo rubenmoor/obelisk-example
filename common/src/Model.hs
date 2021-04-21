@@ -7,8 +7,6 @@ module Model
 import           Data.Aeson              (FromJSON (..), ToJSON (..),
                                           Value (String))
 import           Data.Aeson.Types        (unexpected)
-import           Data.Password.Argon2    (Argon2, PasswordHash)
-import           Data.Password.Instances ()
 import           Data.Text               (Text)
 import           Data.Time               (Day, UTCTime)
 import           GHC.Generics            (Generic)
@@ -86,7 +84,7 @@ data Rank
   = RankModerator
   | RankAdmin
   | RankOwner
-  deriving (Generic)
+  deriving (Generic, Eq, Ord)
 
 instance FromJSON Rank
 instance ToJSON Rank
