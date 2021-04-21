@@ -1,5 +1,4 @@
 {-# LANGUAGE DataKinds            #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# LANGUAGE LambdaCase           #-}
 {-# LANGUAGE LiberalTypeSynonyms  #-}
@@ -8,24 +7,27 @@
 {-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TupleSections        #-}
 {-# OPTIONS_GHC -Wno-type-defaults #-}
 
 module Handlers
   ( handlers
+  , handleFeedXML
   , mkContext
   ) where
 
 import           AppData                   (DbAction, EnvApplication (..),
                                             Handler)
-import           Auth                      (mkClaims, mkCompactJWT, verifyCompactJWT)
-import           Common                    (EpisodeNew (..), Routes,
+import           Auth                      (mkClaims, mkCompactJWT,
+                                            verifyCompactJWT)
+import           Common                    (EpisodeNew (..), RoutesApi,
                                             convertToFilename, formatDuration)
 import           Common.Auth               (CompactJWT, LoginData (..),
                                             UserInfo (..), UserNew (..))
 import           Control.Applicative       (Applicative (pure))
 import           Control.Category          (Category ((.)))
-import           Control.Exception.Lifted  (catch, evaluate, SomeException)
-import           Control.Monad             (unless, Monad ((>>=)), when)
+import           Control.Exception.Lifted  (SomeException, catch, evaluate)
+import           Control.Monad             (Monad ((>>=)), unless, when)
 import           Control.Monad.Except      (runExceptT)
 import           Control.Monad.IO.Class    (MonadIO (liftIO))
 import           Control.Monad.Reader      (asks)
@@ -34,19 +36,20 @@ import           Crypto.JWT                (JWK)
 import           Data.Bool                 (Bool (..))
 import qualified Data.ByteString.Lazy      as Lazy
 import qualified Data.ByteString.Lazy.UTF8 as BSU
+import           Data.Char                 (isAlphaNum)
 import           Data.Either               (either)
 import           Data.Eq                   (Eq ((==)))
 import           Data.FileEmbed            (makeRelativeToProject)
 import           Data.Function             (flip, ($))
 import           Data.Functor
 import           Data.Int                  (Int)
-import           Data.List                 (map, null, sortOn)
+import           Data.List                 ((++), map, null, sortOn)
+import           Data.Map                  (Map)
 import qualified Data.Map                  as Map
-import Data.Map (Map)
 import           Data.Maybe                (Maybe (Just, Nothing), isJust,
                                             maybe)
 import           Data.Monoid               ((<>))
-import           Data.Ord                  (Ord((>), (<)), Down (Down))
+import           Data.Ord                  (Down (Down), Ord ((<), (>)))
 import           Data.Password             (mkPassword)
 import           Data.Password.Argon2      (PasswordCheck (..), checkPassword,
                                             hashPassword)
@@ -58,34 +61,37 @@ import qualified Data.Text                 as Text
 import           Data.Time                 (defaultTimeLocale, formatTime,
                                             getCurrentTime, parseTimeM)
 import           Data.Tuple                (snd)
-import           Database.Gerippe          (joinMTo1Where, join1ToMWhere, Entity (..), InnerJoin (..),
+import           Database.Gerippe          (Entity (..), InnerJoin (..), Key,
                                             PersistStoreWrite (insert, insert_),
                                             PersistUniqueRead (getBy),
-                                            PersistentSqlException, from,
-                                            getAll, getWhere, joinMTo1Where',
-                                            on, select, val, where_, (&&.),
-                                            (==.), (^.), get, Key)
-import           Database.Persist.MySQL    ((=.), PersistStoreWrite(update), SqlBackend, runSqlPool)
-import           Model                     (Rank(RankModerator), Alias (..), AuthPwd (..),
+                                            PersistentSqlException, from, get,
+                                            getAll, getWhere, join1ToMWhere,
+                                            join1ToMWhere', joinMTo1Where,
+                                            joinMTo1Where', on, select, val,
+                                            where_, (&&.), (==.), (^.))
+import           Database.Persist.MySQL    (PersistStoreWrite (update),
+                                            SqlBackend, runSqlPool, (=.))
+import           Model                     (Alias (..), AuthPwd (..),
                                             Clearance (..), EntityField (..),
                                             Episode (..), Event (..),
                                             EventSource (..), Journal (..),
-                                            Podcast (..), Subject (..),
+                                            Platform (..), Podcast (..),
+                                            Rank (RankModerator), Subject (..),
                                             Unique (..), User (..),
                                             Visibility (..))
 import           Safe                      (headMay)
 import           Servant.API               ((:<|>) (..),
                                             FromHttpApiData (parseHeader))
-import           Servant.Server            (err403, Context ((:.), EmptyContext),
+import           Servant.Server            (Context ((:.), EmptyContext),
                                             HasServer (ServerT),
                                             ServantErr (errBody), err400,
-                                            err404, err500, throwError)
+                                            err403, err404, err500, throwError)
 import           Snap.Core                 (Snap, getHeader, getRequest)
+import           System.IO                 (print)
 import           Text.Blaze.Renderer.Utf8  (renderMarkup)
 import           Text.Heterocephalus       (compileHtmlFile)
 import           Text.Show                 (Show (show))
-import System.IO (print)
-import Data.Char (isAlphaNum)
+import Data.Foldable (Foldable(foldl'))
 
 default(Text)
 
@@ -136,10 +142,9 @@ mkContext jwk pool =
         pure $ UserInfo{..}
   in  authHandler :. EmptyContext
 
-handlers :: ServerT Routes '[Snap UserInfo] Handler
+handlers :: ServerT RoutesApi '[Snap UserInfo] Handler
 handlers =
-    handleFeedXML
-  :<|>  (handleGrantAuthPwd
+        (handleGrantAuthPwd
     :<|> handleUserNew
     :<|> handleDoesUserExist
         )
@@ -424,7 +429,17 @@ handlePodcastNew UserInfo{..} podcastIdentifier = do
       journalSubject = SubjectPodcast
   runDb $ insert_ Journal{..}
 
-handlePodcastGet :: Text -> Handler Podcast
-handlePodcastGet podcastIdentifier =
-  runDb (getBy $ UPodcastIdentifier podcastIdentifier)
-    >>= maybe (throwError err404) (pure . entityVal)
+handlePodcastGet :: Text -> Handler (Podcast, [Platform], [Episode])
+handlePodcastGet podcastIdentifier = do
+  ls <- runDb $ select $ from $ \(p `InnerJoin` pl `InnerJoin` e) -> do
+    on (p ^. PodcastId ==. pl ^. PlatformFkPodcast)
+    on (p ^. PodcastId ==. e ^. EpisodeFkPodcast)
+    where_ (p ^. PodcastIdentifier ==. val podcastIdentifier)
+    pure (p, (pl, e))
+  let insertPair (platforms, episodes) (p, e) = (p ++ platforms, e ++ episodes)
+      acc mp (podcast, (p, e)) = Map.insertWith insertPair podcast ([p], [e]) mp
+      m = foldl' acc  Map.empty ls
+  case Map.toList m of
+    []                    -> throwError err404
+    [(podcast, (ps, es))] -> pure (entityVal podcast, entityVal <$> ps, entityVal <$> es)
+    _:_:_                 -> throwError $ err500 { errBody = "podcast id not unique" }

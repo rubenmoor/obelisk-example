@@ -15,7 +15,7 @@ import           Route                           (BackendRoute (..),
                                                   fullRouteEncoder)
 
 import           AppData                         (EnvApplication (..))
-import           Common                          (routes)
+import           Common                          (RoutesApi, RouteShow, RouteMedia)
 import           Common.Auth                     (UserInfo)
 import           Config                          (Params (..))
 import           Control.Applicative             (Applicative (pure))
@@ -36,7 +36,7 @@ import           Database.Persist.MySQL          (ConnectInfo (..),
                                                   defaultConnectInfo,
                                                   runMigration, runSqlPool,
                                                   withMySQLPool)
-import           Handlers                        (handlers, mkContext)
+import           Handlers                        (handleFeedXML, handlers, mkContext)
 import           Model                           (migrateAll)
 import           Obelisk.Backend                 (Backend (..))
 import           Obelisk.Configs                 (ConfigsT,
@@ -44,14 +44,19 @@ import           Obelisk.Configs                 (ConfigsT,
                                                   runConfigsT)
 import           Obelisk.ExecutableConfig.Lookup (getConfigs)
 import           Obelisk.Route                   (pattern (:/))
-import           Servant.Server                  (Context, serveSnapWithContext)
+import           Servant.Server                  (serveSnap, Context, serveSnapWithContext)
 import           Snap.Core                       (Snap)
 import           System.Exit                     (ExitCode (ExitFailure),
                                                   exitWith)
 import           System.IO                       (IO)
+import Data.Proxy (Proxy(Proxy))
+import Servant (serveDirectory)
 
-backendApp :: Context '[Snap UserInfo] -> EnvApplication -> Snap ()
-backendApp ctx = runReaderT $ serveSnapWithContext routes ctx handlers
+serveApi :: Context '[Snap UserInfo] -> EnvApplication -> Snap ()
+serveApi ctx = runReaderT $ serveSnapWithContext (Proxy :: Proxy RoutesApi) ctx handlers
+
+serveFeed :: EnvApplication -> Snap ()
+serveFeed = runReaderT $ serveSnap (Proxy :: Proxy RouteShow) handleFeedXML
 
 backend :: Backend BackendRoute FrontendRoute
 backend = Backend
@@ -79,9 +84,10 @@ backend = Backend
             }
           ctx = mkContext jwk pool
       NoLoggingT $ serve $ \case
-        (BackendRoute_Missing :/ ()) -> pure ()
-        (BackendRoute_Api     :/  _) -> backendApp ctx env
-        (BackendRoute_Show    :/  _) -> backendApp ctx env
+        (BackendRoute_Missing :/ _) -> pure ()
+        (BackendRoute_Show    :/ _) -> serveFeed env
+        (BackendRoute_Media   :/ _) -> serveDirectory "media"
+        (BackendRoute_Api     :/ _) -> serveApi ctx env
   , _backend_routeEncoder = fullRouteEncoder
   }
 

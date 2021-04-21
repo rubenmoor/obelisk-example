@@ -12,8 +12,8 @@ module Model.Custom
   ) where
 
 import           Control.Category        (Category ((.)))
-import           Data.Aeson              (FromJSON, ToJSON)
-import           Data.Either             (Either (Left))
+import           Data.Aeson              (Value(String), FromJSON (..), ToJSON (..))
+import           Data.Either             (Either(..))
 import           Data.Either.Combinators (mapLeft)
 import           Data.Eq                 (Eq)
 import           Data.Function           (($))
@@ -29,13 +29,20 @@ import           GHC.Generics            (Generic)
 import           Text.Read               (Read)
 import           Text.Show               (Show (show))
 import           Text.URI                (URI, mkURI, render)
+import Control.Applicative (Applicative(pure))
+import Control.Monad.Fail (MonadFail(fail))
+import Data.Aeson.Types (unexpected)
+import Data.Aeson.Encoding (string)
 
 data Visibility
   = VisibilityPublic
   | VisibilityHidden
-  deriving (Eq, Ord, Show, Read)
+  deriving (Eq, Ord, Show, Read, Generic)
 
 derivePersistField "Visibility"
+
+instance FromJSON Visibility
+instance ToJSON Visibility
 
 data Rank
   = RankModerator
@@ -73,7 +80,10 @@ data PlatformName
   | PlatformSpotify
   | PlatformItunes
   | PlatformYoutube
-  deriving (Show, Read)
+  deriving (Show, Read, Generic)
+
+instance FromJSON PlatformName
+instance ToJSON PlatformName
 
 derivePersistField "PlatformName"
 
@@ -84,3 +94,12 @@ instance PersistField URI where
 
 instance PersistFieldSql URI where
   sqlType _ = SqlString
+
+instance FromJSON URI where
+  parseJSON (String str) = case mkURI str of
+    Left e -> fail $ show e
+    Right u -> pure u
+  parseJSON o = unexpected o
+
+instance ToJSON URI where
+  toJSON = toJSON . render

@@ -1,31 +1,60 @@
+{-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE KindSignatures      #-}
 {-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE NoImplicitPrelude   #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE QuasiQuotes         #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 
 module PagesPodcast
   ( pagePodcastView
   ) where
 
-import           Common.Auth            (UserInfo (..))
-import           Control.Monad.Fix      (MonadFix)
-import           Control.Monad.Reader   (MonadReader, asks)
-import qualified Data.Map               as Map
-import           Model                  (Podcast (..), Rank (..))
-import           Obelisk.Route.Frontend (R, RouteToUrl, Routed (askRoute),
-                                         RoutedT, SetRoute)
-import           Reflex.Dom             (widgetHold_, switchHold, el, elClass, text, elAttr, (=:), PostBuild(getPostBuild),  DomBuilder, EventWriter, MonadHold,
-                                         Prerender, Reflex(Event, never, Dynamic), blank,
-                                         dyn_, ffor, zipDyn)
-import           Route                  (FrontendRoute,
-                                         PodcastIdentifier (unPodcastIdentifier))
-import           State                  (EStateUpdate, Session (..), State (..))
-import Shared (iFa)
-import Data.Witherable (Filterable(mapMaybe))
-import Servant.Reflex (reqSuccess)
-import Client (getPodcast, request)
+import           Client                   (getPodcast, request)
+import           Common.Auth              (UserInfo (..))
+import           Control.Monad            (forM_)
+import           Control.Monad.Fix        (MonadFix)
+import           Control.Monad.Reader     (MonadReader, asks)
+import           Data.Either              (Either (Right))
+import           Data.Function            (($))
+import           Data.Functor             (Functor (fmap), (<$>))
+import           Data.Int                 (Int)
+import qualified Data.Map                 as Map
+import           Data.Maybe               (Maybe (Just))
+import           Data.Monoid              (Monoid (mempty))
+import           Data.Ord                 (Ord((<), (>=)))
+import           Data.Semigroup           (Semigroup ((<>)))
+import           Data.Text                (Text, toLower)
+import qualified Data.Text                as Text
+import           Data.Time                (formatTime)
+import           Data.Time.Format         (defaultTimeLocale)
+import           Data.Witherable          (Filterable (mapMaybe))
+import           GHC.Num                  (Num ((*)))
+import           GHC.Real                 (Integral (div, mod))
+import           Model                    (Episode (..), Platform (..),
+                                           Podcast (..), Rank (..))
+import           Model.Custom             (PlatformName (..))
+import           Obelisk.Generated.Static (static)
+import           Obelisk.Route.Frontend   (R, RouteToUrl, Routed (askRoute),
+                                           RoutedT, SetRoute)
+import           Reflex.Dom               (DomBuilder, EventWriter, MonadHold,
+                                           PostBuild (getPostBuild), Prerender,
+                                           Reflex (Dynamic, Event, never),
+                                           blank, dyn_, el, elAttr, elClass,
+                                           ffor, switchHold, text, widgetHold_,
+                                           zipDyn, (=:))
+import           Route                    (FrontendRoute, PodcastIdentifier (unPodcastIdentifier))
+import           Servant.Reflex           (reqSuccess)
+import           Shared                   (iFa)
+import           State                    (EStateUpdate, Session (..),
+                                           State (..))
+import           Text.Printf              (printf)
+import           Text.RawString.QQ
+import qualified Text.URI                 as URI
+import Text.Regex.TDFA ((=~))
 
 pagePodcastView
   :: forall t js (m :: * -> *).
@@ -51,11 +80,65 @@ pagePodcastView = do
   ePb <- getPostBuild
   ePodcast <- mapMaybe reqSuccess <$>
     request (getPodcast (Right <$> dynPodcastId) ePb)
-  widgetHold_ blank $ ffor ePodcast $ \Podcast{..} -> do
+  widgetHold_ blank $ ffor ePodcast $ \(Podcast{..}, platforms, episodes) -> do
     elClass "div" "row" $
       elClass "div" "col-12" $ do
         el "h2" $ text podcastTitle
         el "h4" $ text podcastAuthors
-        el "span" $ text podcastDescription
-    elAttr "div" ("class" =: "col-8") $ text "platform links"
-  blank
+    elClass "div" "row" $ do
+      elAttr "div" ("class" =: "col-8") $ do
+        forM_ platforms $ \Platform{..} -> do
+          let imgSrc = case platformName of
+                PlatformSpotify  -> static @"spotify.png"
+                PlatformTelegram -> static @"telegram.png"
+                PlatformItunes   -> static @"itunes.png"
+                PlatformYoutube  -> static @"youtube.png"
+          elAttr "a" ("href" =: URI.render platformLink) $
+            elAttr "img" ("src" =: imgSrc) blank
+      elAttr "div" ("class" =: "col-4") $ text podcastDescription
+      elAttr "div" ("class" =: "col-8") $ forM_ episodes $ \Episode{..} -> do
+        el "div" $ do
+          let audioSrc = mkAudioFilePath podcastIdentifier episodeSlug episodeFtExtension
+          el "h3" $ text $ "#" <> episodeCustomIndex <> "  " <> toLower episodeTitle
+          el "span" $ text $ Text.pack $ formatTime defaultTimeLocale "%F" episodePubdate
+          -- TODO: introduce pagination and activate preload
+          elAttr "audio" ("controls" =: "controls" <> "preload" =: "none") $
+            elAttr "source" ("src" =: audioSrc) blank
+          elAttr "div" mempty $ text $ "Duration: " <> formatDuration episodeDuration
+          elAttr "span" mempty $ do
+            text "("
+            elAttr "a" (   "href" =: audioSrc
+                        <> "title" =: episodeFtExtension
+                        <> "download" =: episodeSlug
+                       ) $ text "download"
+            text ")"
+          elAttr "div" mempty $ makeClickableLinks episodeDescriptionLong
+
+formatDuration :: Int -> Text
+formatDuration d =
+  let seconds = d `mod` 60
+      minutes = (d `div` 60) `mod` 60
+      hours = d `div` (60 * 60)
+  in  Text.pack $ printf "%02d:%02d:%02d" hours minutes seconds
+
+mkAudioFilePath :: Text -> Text -> Text -> Text
+mkAudioFilePath podcastIdentifier slug ext =
+  "/media/" <> podcastIdentifier <> "/" <> slug <> ext
+
+makeClickableLinks
+  :: DomBuilder t m
+  => Text
+  -> m ()
+makeClickableLinks str =
+    let (prefix, _ :: Text, suffix, groups) =
+          str =~ ([r|([[:space:]]|\`)https?://(]|[-a-zA-Z0-9._~%!*'();:@&=+$,/?#[])+|] :: Text)
+    in case groups of
+         []       -> text str
+         ws:[url] -> do text $ prefix <> ws
+                        toLink url
+                        makeClickableLinks suffix
+         _        -> text str -- impossible
+  where
+    toLink s =
+      let inner = if Text.length s < 41 then s else Text.take 37 s <> "..."
+      in  elAttr "a" ("href" =: s) $ text inner

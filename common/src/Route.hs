@@ -50,10 +50,9 @@ instance Wrapped PodcastIdentifier
 data BackendRoute :: * -> * where
   -- | Used to handle unparseable routes.
   BackendRoute_Missing :: BackendRoute ()
-  BackendRoute_Api :: BackendRoute PageName
   BackendRoute_Show :: BackendRoute PageName
-  -- You can define any routes that will be handled specially by the backend here.
-  -- i.e. These do not serve the frontend, but do something different, such as serving static files.
+  BackendRoute_Media :: BackendRoute PageName
+  BackendRoute_Api :: BackendRoute PageName
 
 data FrontendRoute :: * -> * where
   FrontendRoute_Main     :: FrontendRoute ()
@@ -70,8 +69,9 @@ fullRouteEncoder = mkFullRouteEncoder
   (FullRoute_Backend BackendRoute_Missing :/ ())
   (\case
       BackendRoute_Missing -> PathSegment "missing" $ unitEncoder mempty
-      BackendRoute_Api -> PathSegment "api" id
       BackendRoute_Show -> PathSegment "show" id
+      BackendRoute_Media -> PathSegment "media" id
+      BackendRoute_Api -> PathSegment "api" id
   )
   (\case
       FrontendRoute_Main -> PathEnd $ unitEncoder mempty

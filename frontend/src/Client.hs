@@ -19,7 +19,7 @@ import           Data.Function       (($))
 import           Data.Functor        (Functor (fmap))
 import           Data.Maybe          (Maybe)
 import           Data.Text           (Text)
-import           Model               (Podcast, Alias (aliasName))
+import           Model               (Episode, Platform, Podcast, Alias (aliasName))
 import           Reflex.Dom          (Prerender (Client, prerender),
                                       Reflex (Dynamic, Event, never), constDyn,
                                       ffor, switchDyn)
@@ -84,7 +84,7 @@ getPodcast
   :: SupportsServantReflex t m
   => Dynamic t (Either Text Text) -- podcast identifier
   -> Event t ()
-  -> m (Event t (ReqResult () Podcast))
+  -> m (Event t (ReqResult () (Podcast, [Platform], [Episode])))
 
 -- user
 

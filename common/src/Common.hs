@@ -14,7 +14,6 @@ import           Control.Category         (Category (id))
 import           Data.Aeson               (FromJSON, ToJSON)
 import           Data.Bool                (Bool)
 import qualified Data.ByteString.Lazy     as Lazy
-import           Data.Data                (Proxy (Proxy))
 import           Data.Foldable            (Foldable (foldl'))
 import           Data.Function            (($))
 import           Data.Int                 (Int)
@@ -25,7 +24,7 @@ import           GHC.Generics             (Generic)
 import           GHC.Num                  (Num ((*)))
 import           GHC.Real                 (Integral (div, mod))
 import           Network.HTTP.Media       ((//), (/:))
-import           Servant.API              ((:<|>) (..), (:>), Get, JSON, Post,
+import           Servant.API              (Raw, (:<|>) (..), (:>), Get, JSON, Post,
                                            ReqBody)
 import           Servant.API.Capture      (Capture)
 import           Servant.API.ContentTypes (Accept (..), MimeRender (..),
@@ -33,16 +32,13 @@ import           Servant.API.ContentTypes (Accept (..), MimeRender (..),
 import           Text.Printf              (printf)
 import           Text.Read                (Read)
 import           Text.Show                (Show)
-import Model (Podcast)
-
-type Routes =
-       RouteShow
-  :<|> RoutesApi
-
+import Model (Episode, Platform, Podcast)
 
 type RouteShow = "show" :> Capture "podcast_id" Text :>
   ( "feed.xml" :> Get '[XML] Lazy.ByteString
   )
+
+type RouteMedia = "media" :> Raw
 
 type RoutesApi = "api" :>
   (     "auth" :>
@@ -89,10 +85,7 @@ instance ToJSON EpisodeNew
 -- podcast
 
 type RoutePodcastNew = "new" :> ReqBody '[JSON] Text :> Post '[JSON] ()
-type RoutePodcastGet = Capture "podcast_id" Text :> Get '[JSON] Podcast
-
-routes :: Proxy Routes
-routes = Proxy
+type RoutePodcastGet = Capture "podcast_id" Text :> Get '[JSON] (Podcast, [Platform], [Episode])
 
 data XML
 

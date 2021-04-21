@@ -14,12 +14,15 @@ library
     , data-default
     , ghcjs-dom
     , jsaddle
+    , modern-uri
     , mtl
     , obelisk-frontend
     , obelisk-executable-config-lookup
     , obelisk-generated-static
     , obelisk-route
+    , raw-strings-qq
     , reflex-dom
+    , regex-tdfa
     , servant
     , servant-reflex
     , text

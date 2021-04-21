@@ -49,10 +49,12 @@ Podcast
   authors          Text
   itunesOwnerNames Text
   keywords         Text
-  deriving Generic
+  deriving Eq Ord Generic
 Platform
   name             PlatformName
   link             URI
+  fkPodcast        PodcastId
+  deriving Generic
 Episode
   fkPodcast        PodcastId
   title            Text
@@ -72,6 +74,7 @@ Episode
   videoUrl         Text
   visibility       Visibility
   fkEventSource    EventSourceId
+  deriving Eq Ord Generic
 User                             -- some real person
   name             Text
   UUserName name
@@ -108,3 +111,9 @@ instance ToJSON Alias
 
 instance FromJSON Podcast
 instance ToJSON Podcast
+
+instance FromJSON Platform
+instance ToJSON Platform
+
+instance FromJSON Episode
+instance ToJSON Episode
