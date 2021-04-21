@@ -38,7 +38,12 @@ in
     ios.bundleIdentifier = "systems.obsidian.obelisk.examples.minimal";
     ios.bundleName = "Obelisk Minimal Example";
     overrides = self: super: {
-      gerippe = pkgs.haskell.lib.dontHaddock (self.callCabal2nix "gerippe" ../gerippe { });
+      gerippe = pkgs.haskell.lib.dontHaddock (self.callCabal2nix "gerippe" (pkgs.fetchFromGitHub {
+        owner = "rubenmoor";
+        repo = "gerippe";
+        rev = "5dedac304b5378eea912f7ce1055793ee108d713";
+        sha256 = "0jcd3bfm6kcy47iy0z1zbbl8asmy4kvbv1n01g52g550ksgssq5x";
+      }) {});
       hspec-snap = self.callCabal2nix "hspec-snap" (pkgs.fetchFromGitHub {
         owner = "dbp";
         repo = "hspec-snap";
