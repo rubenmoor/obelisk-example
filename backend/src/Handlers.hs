@@ -19,11 +19,11 @@ module Handlers
 import           AppData                   (DbAction, EnvApplication (..),
                                             Handler)
 import           Auth                      (mkClaims, mkCompactJWT,
-                                            verifyCompactJWT)
+                                            verifyCompactJWT, UserInfo (..))
 import           Common                    (EpisodeNew (..), RoutesApi,
                                             convertToFilename, formatDuration)
 import           Common.Auth               (CompactJWT, LoginData (..),
-                                            UserInfo (..), UserNew (..))
+                                            UserNew (..))
 import           Control.Applicative       (Applicative (pure))
 import           Control.Category          (Category ((.)))
 import           Control.Exception.Lifted  (SomeException, catch, evaluate)
@@ -77,8 +77,9 @@ import           Model                     (Alias (..), AuthPwd (..),
                                             EventSource (..), Journal (..),
                                             Platform (..), Podcast (..),
                                             Rank (RankModerator), Subject (..),
-                                            Unique (..), User (..),
+                                            User (..),
                                             Visibility (..))
+import DbAdapter (Unique (..) )
 import           Safe                      (headMay)
 import           Servant.API               ((:<|>) (..),
                                             FromHttpApiData (parseHeader))

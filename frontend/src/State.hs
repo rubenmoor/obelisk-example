@@ -3,7 +3,7 @@
 
 module State where
 
-import           Common.Auth      (CompactJWT, UserInfo)
+import           Common.Auth      (CompactJWT, SessionData)
 import           Control.Category (Category ((.)))
 import           Data.Aeson       (FromJSON, ToJSON)
 import           Data.Default     (Default (..))
@@ -22,14 +22,7 @@ instance Semigroup EStateUpdate where
         v' = unEStateUpdate v
     in  EStateUpdate $ v' . u'
 
--- TODO: lenses
-data Session
-  = SessionUser CompactJWT UserInfo
-  | SessionAnon
-  deriving (Generic)
-
-instance FromJSON Session
-instance ToJSON Session
+-- State
 
 data State = State
   { stSession :: Session
@@ -42,3 +35,14 @@ instance Default State where
   def = State
     { stSession = SessionAnon
     }
+
+-- Session
+
+-- TODO: lenses
+data Session
+  = SessionUser SessionData
+  | SessionAnon
+  deriving (Generic)
+
+instance FromJSON Session
+instance ToJSON Session

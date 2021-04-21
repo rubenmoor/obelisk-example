@@ -11,7 +11,6 @@ library
     , bytestring
     , containers
     , either
-    , gerippe
     , http-api-data
     , http-media
     , lens
@@ -32,6 +31,5 @@ library
       Common
     , Common.Auth
     , Model
-    , Model.Custom
     , Route
   ghc-options: -Wall -Wredundant-constraints -Wincomplete-uni-patterns -Wincomplete-record-updates -O -fno-show-valid-hole-fits
