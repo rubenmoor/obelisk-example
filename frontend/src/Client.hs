@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts          #-}
 {-# LANGUAGE KindSignatures            #-}
 {-# LANGUAGE NoImplicitPrelude         #-}
@@ -9,7 +10,7 @@ module Client where
 
 import           Common              (EpisodeNew, RoutesApi)
 import           Common.Auth         (CompactJWT, LoginData (..),
-                                      UserInfo (uiAlias), UserNew (..))
+                                      SessionData (..), UserNew (..))
 import           Control.Applicative (Applicative (pure), (<$>))
 import           Control.Monad       (Monad)
 import           Data.Bool           (Bool)
@@ -19,7 +20,7 @@ import           Data.Function       (($))
 import           Data.Functor        (Functor (fmap))
 import           Data.Maybe          (Maybe)
 import           Data.Text           (Text)
-import           Model               (Episode, Platform, Podcast, Alias (aliasName))
+import           Model               (Episode, Platform, Podcast)
 import           Reflex.Dom          (Prerender (Client, prerender),
                                       Reflex (Dynamic, Event, never), constDyn,
                                       ffor, switchDyn)
@@ -41,19 +42,19 @@ getAuthData
 getAuthData dynState =
   ffor dynState $ \st -> case stSession st of
     SessionAnon        -> Left "not logged in"
-    SessionUser jwt ui -> Right (jwt, aliasName $ uiAlias ui)
+    SessionUser SessionData{..} -> Right (sdJwt, sdAliasName)
 
 postAuthenticate
   :: SupportsServantReflex t m
   => Dynamic t (Either Text LoginData)
   -> Event t ()
-  -> m (Event t (ReqResult () (Maybe (CompactJWT, UserInfo))))
+  -> m (Event t (ReqResult () (Maybe SessionData)))
 
 postAuthNew
   :: SupportsServantReflex t m
   => Dynamic t (Either Text UserNew)
   -> Event t ()
-  -> m (Event t (ReqResult () (CompactJWT, UserInfo)))
+  -> m (Event t (ReqResult () SessionData))
 
 postDoesUserExist
   :: SupportsServantReflex t m

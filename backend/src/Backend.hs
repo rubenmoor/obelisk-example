@@ -15,8 +15,9 @@ import           Route                           (BackendRoute (..),
                                                   fullRouteEncoder)
 
 import           AppData                         (EnvApplication (..))
-import           Common                          (RoutesApi, RouteShow, RouteMedia)
-import           Common.Auth                     (UserInfo)
+import           Auth                            (UserInfo)
+import           Common                          (RouteMedia, RouteShow,
+                                                  RoutesApi)
 import           Config                          (Params (..))
 import           Control.Applicative             (Applicative (pure))
 import           Control.Monad.Logger            (NoLoggingT (..))
@@ -29,6 +30,7 @@ import qualified Data.Aeson                      as Aeson
 import           Data.Function                   (($))
 import           Data.Maybe                      (maybe)
 import           Data.Monoid                     ((<>))
+import           Data.Proxy                      (Proxy (Proxy))
 import           Data.Text                       (Text)
 import           Data.Text.IO                    (putStrLn)
 import           Database.MySQL.Base.Types       (Option (CharsetName))
@@ -36,21 +38,22 @@ import           Database.Persist.MySQL          (ConnectInfo (..),
                                                   defaultConnectInfo,
                                                   runMigration, runSqlPool,
                                                   withMySQLPool)
-import           Handlers                        (handleFeedXML, handlers, mkContext)
-import           Model                           (migrateAll)
+import           DbAdapter                       (migrateAll)
+import           Handlers                        (handleFeedXML, handlers,
+                                                  mkContext)
 import           Obelisk.Backend                 (Backend (..))
 import           Obelisk.Configs                 (ConfigsT,
                                                   HasConfigs (getConfig),
                                                   runConfigsT)
 import           Obelisk.ExecutableConfig.Lookup (getConfigs)
 import           Obelisk.Route                   (pattern (:/))
-import           Servant.Server                  (serveSnap, Context, serveSnapWithContext)
+import           Servant                         (serveDirectory)
+import           Servant.Server                  (Context, serveSnap,
+                                                  serveSnapWithContext)
 import           Snap.Core                       (Snap)
 import           System.Exit                     (ExitCode (ExitFailure),
                                                   exitWith)
 import           System.IO                       (IO)
-import Data.Proxy (Proxy(Proxy))
-import Servant (serveDirectory)
 
 serveApi :: Context '[Snap UserInfo] -> EnvApplication -> Snap ()
 serveApi ctx = runReaderT $ serveSnapWithContext (Proxy :: Proxy RoutesApi) ctx handlers

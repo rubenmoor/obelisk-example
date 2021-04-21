@@ -29,7 +29,7 @@ import           Clay                        (Center (center), Cursor (cursor),
                                               zIndex)
 import           Client                      (getAuthData, postPodcastNew,
                                               request)
-import           Common.Auth                 (UserInfo (..))
+import           Common.Auth                 (SessionData (..))
 import           Control.Applicative         (Applicative (pure))
 import           Control.Category            (Category ((.)))
 import           Control.Monad               (Monad ((>>=)), when)
@@ -63,7 +63,6 @@ import           MediaQuery                  (ResponsiveClass (rcClass),
                                               onMobileMkOverlay,
                                               onMobileWidthAuto, respClass,
                                               respClasses)
-import           Model                       (Alias (aliasName))
 import           Obelisk.Route.Frontend      (RouteToUrl, RoutedT, SetRoute,
                                               mapRoutedT, routeLink, subRoute_)
 import           PagesUser                   (pageAliasRename, pageAliasSelect,
@@ -106,7 +105,7 @@ pageSettings = do
   dynSession <- asks $ fmap stSession
   dyn_ $ ffor dynSession $ \case
     SessionAnon -> blank
-    SessionUser _ UserInfo{..} -> when uiIsSiteAdmin $ do
+    SessionUser SessionData{..} -> when sdIsSiteAdmin $ do
       el "h3" $ text "Create new podcast"
       (mStr, _) <- elLabelInput def "Podcast identifier" "podcastidentifier"
       eSend <- btnSend $ text "Send"
@@ -163,11 +162,11 @@ navigation = do
         elRegister <- routeLink (FrontendRoute_Register :/ ()) $
           spanNavBtn $ text "Register"
         pure $ leftmost $ domEvent Click <$> [elLogin, elRegister]
-      SessionUser _ ui -> do
+      SessionUser SessionData{..} -> do
         elSettings <- routeLink (FrontendRoute_Settings :/ ()) $
           spanNavBtn $ text "Settings"
         elLogout <- spanNavBtn $ do
-          let alias = aliasName $ uiAlias ui
+          let alias = sdAliasName
               css = style $ do
                 color darkgray
                 fontSizeCustom smaller

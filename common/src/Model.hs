@@ -1,119 +1,133 @@
-{-# LANGUAGE DataKinds                  #-}
-{-# LANGUAGE DeriveGeneric              #-}
-{-# LANGUAGE DerivingStrategies         #-}
-{-# LANGUAGE EmptyDataDecls             #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GADTs                      #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE QuasiQuotes                #-}
-{-# LANGUAGE RecordWildCards            #-}
-{-# LANGUAGE StandaloneDeriving         #-}
-{-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE DeriveGeneric         #-}
 
 module Model
   ( module Model
-  , module Model.Custom
-  , Unique (..)
-  , EntityField (..)
   ) where
 
-import           Data.Aeson              (FromJSON, ToJSON)
+import           Data.Aeson              (FromJSON (..), ToJSON (..),
+                                          Value (String))
+import           Data.Aeson.Types        (unexpected)
 import           Data.Text               (Text)
 import           Data.Time               (Day, UTCTime)
-import           Database.Persist.TH     (mkMigrate, mkPersist,
-                                          persistLowerCase, share, sqlSettings)
-import Text.URI (URI)
-import           Data.Password.Argon2    (Argon2, PasswordHash)
-import           Data.Password.Instances ()
-import           Database.Persist.Class  (PersistEntity (EntityField, Unique))
 import           GHC.Generics            (Generic)
-import           Model.Custom            (Event (..), Rank (..), Subject (..),
-                                          Visibility (..), PlatformName)
+import           Text.URI                (URI, mkURI, render)
 
-share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
-Podcast
-  identifier       Text
-  UPodcastIdentifier identifier
-  title            Text
-  description      Text
-  copyright        Text
-  email            Text
-  licence          Text
-  pubDate          UTCTime
-  itunesSubtitle   Text
-  itunesSummary    Text
-  authors          Text
-  itunesOwnerNames Text
-  keywords         Text
-  deriving Eq Ord Generic
-Platform
-  name             PlatformName
-  link             URI
-  fkPodcast        PodcastId
-  deriving Generic
-Episode
-  fkPodcast        PodcastId
-  title            Text
-  slug             Text
-  UEpisodeSlug slug
-  customIndex      Text
-  UCustomIndex customIndex
-  ftExtension      Text
-  audioContentType Text
-  thumbnailFile    FilePath
-  descriptionShort Text
-  descriptionLong  Text
-  duration         Int           -- duration in seconds
-  fileSize         Int           -- file size in bytes
-  pubdate          Day           -- day of recording
-  created          UTCTime
-  videoUrl         Text
-  visibility       Visibility
-  fkEventSource    EventSourceId
-  deriving Eq Ord Generic
-User                             -- some real person
-  name             Text
-  UUserName name
-  isSiteAdmin      Bool
-  fkEventSource    EventSourceId
-  fkDefaultAlias   AliasId Maybe
-  deriving Show
-Alias                            -- one of several identities
-  name             Text
-  fkUser           UserId
-  UAliasName name
-  deriving Generic Show
-Clearance
-  fkAlias          AliasId
-  fkPodcast        PodcastId
-  UClearance fkAlias fkPodcast
-  rank             Rank
-AuthPwd
-  fkUser           UserId
-  password         (PasswordHash Argon2)
-  UAuthPwdFkUser fkUser
-Journal
-  fkEventSource    EventSourceId
-  fkAlias          AliasId Maybe
-  created          UTCTime
-  subject          Subject
-  event            Event
-  description      Text
-EventSource
-|]
+data Podcast = Podcast
+  { podcastIdentifier       :: Text
+  , podcastTitle            :: Text
+  , podcastDescription      :: Text
+  , podcastCopyright        :: Text
+  , podcastEmail            :: Text
+  , podcastLicence          :: Text
+  , podcastPubDate          :: UTCTime
+  , podcastItunesSubtitle   :: Text
+  , podcastItunesSummary    :: Text
+  , podcastAuthors          :: Text
+  , podcastItunesOwnerNames :: Text
+  , podcastKeywords         :: Text
+  } deriving (Generic)
 
-instance FromJSON Alias
-instance ToJSON Alias
-
-instance FromJSON Podcast
 instance ToJSON Podcast
+instance FromJSON Podcast
 
-instance FromJSON Platform
+-- Platform
+
+data Platform = Platform
+  { platformName :: PlatformName
+  , platformLink :: URI
+  } deriving (Generic)
+
 instance ToJSON Platform
+instance FromJSON Platform
 
-instance FromJSON Episode
+data PlatformName
+  = PlatformTelegram
+  | PlatformSpotify
+  | PlatformItunes
+  | PlatformYoutube
+  deriving (Generic)
+
+instance FromJSON PlatformName
+instance ToJSON PlatformName
+
+-- Episode
+
+data Episode = Episode
+  { episodeTitle            :: Text
+  , episodeSlug             :: Text
+  , episodeCustomIndex      :: Text
+  , episodeFtExtension      :: Text
+  , episodeAudioContentType :: Text
+  , episodeThumbnailFile    :: FilePath
+  , episodeDescriptionShort :: Text
+  , episodeDescriptionLong  :: Text
+  , episodeDuration         :: Int           -- duration in seconds
+  , episodeFileSize         :: Int           -- file size in bytes
+  , episodePubdate          :: Day           -- day of recording
+  , episodeCreated          :: UTCTime
+  , episodeVideoUrl         :: Text
+  , episodeVisibility       :: Visibility
+  } deriving (Generic)
+
 instance ToJSON Episode
+instance FromJSON Episode
+
+data Visibility
+  = VisibilityPublic
+  | VisibilityHidden
+  deriving (Generic)
+
+instance FromJSON Visibility
+instance ToJSON Visibility
+
+data Rank
+  = RankModerator
+  | RankAdmin
+  | RankOwner
+  deriving (Generic, Eq, Ord)
+
+instance FromJSON Rank
+instance ToJSON Rank
+
+-- Journal
+
+data Journal = Journal
+  { journalCreated     :: UTCTime
+  , journalSubject     :: Subject
+  , journalEvent       :: Event
+  , journalDescription :: Text
+  } deriving (Generic)
+
+instance ToJSON Journal
+instance FromJSON Journal
+
+data Event
+  = EventView
+  | EventLogin
+  | EventLogout
+  | EventCreation
+  | EventEdit
+  deriving (Generic)
+
+instance ToJSON Event
+instance FromJSON Event
+
+-- subject of journal entry
+data Subject
+  = SubjectUser -- cases: new user, user changes password, receives new clearance
+  | SubjectAlias
+  | SubjectEpisode
+  | SubjectPodcast
+  deriving (Generic)
+
+instance ToJSON Subject
+instance FromJSON Subject
+
+instance FromJSON URI where
+  parseJSON (String str) = case mkURI str of
+    Left e  -> fail $ show e
+    Right u -> pure u
+  parseJSON o = unexpected o
+
+instance ToJSON URI where
+  toJSON = toJSON . render

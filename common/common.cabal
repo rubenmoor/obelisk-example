@@ -10,17 +10,12 @@ library
     , aeson
     , bytestring
     , containers
-    , either
     , http-api-data
     , http-media
     , lens
     , obelisk-route
     , modern-uri
     , mtl
-    , password
-    , password-instances
-    , persistent
-    , persistent-template
     , reflex-dom
     , servant
     , servant-reflex
@@ -32,6 +27,5 @@ library
       Common
     , Common.Auth
     , Model
-    , Model.Custom
     , Route
   ghc-options: -Wall -Wredundant-constraints -Wincomplete-uni-patterns -Wincomplete-record-updates -O -fno-show-valid-hole-fits

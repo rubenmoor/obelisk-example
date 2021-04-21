@@ -11,6 +11,7 @@
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
+
 module Route where
 
 {- -- You will probably want these imports for composing Encoders.
@@ -25,12 +26,10 @@ import           Control.Category      (Category (id, (.)))
 import           Control.Lens          (Wrapped)
 import           Control.Monad         (mapM)
 import           Data.Either           (Either)
-import           Data.Eq               (Eq)
 import           Data.Foldable         (concat)
 import           Data.Function         (($))
 import           Data.Functor          ((<$>))
-import           Data.Monoid           (Monoid (mempty))
-import           Data.Ord              (Ord)
+import           Data.Monoid           (mempty)
 import           GHC.Generics          (Generic)
 import           Obelisk.Route         (pattern (:/), Encoder,
                                         FullRoute (FullRoute_Backend), PageName,
@@ -39,7 +38,6 @@ import           Obelisk.Route         (pattern (:/), Encoder,
                                         singlePathSegmentEncoder, unitEncoder,
                                         unwrappedEncoder)
 import           Obelisk.Route.TH      (deriveRouteComponent)
-import           Text.Show             (Show)
 
 newtype PodcastIdentifier = PodcastIdentifier
   { unPodcastIdentifier :: Text }

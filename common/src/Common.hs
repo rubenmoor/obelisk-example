@@ -8,7 +8,8 @@
 
 module Common where
 
-import           Common.Auth              (AuthProtect, CompactJWT, LoginData, UserNew, UserInfo)
+import           Common.Auth              (AuthProtect, LoginData, SessionData,
+                                           UserNew)
 import           Control.Applicative      (Applicative (pure))
 import           Control.Category         (Category (id))
 import           Data.Aeson               (FromJSON, ToJSON)
@@ -23,16 +24,14 @@ import qualified Data.Text                as Text
 import           GHC.Generics             (Generic)
 import           GHC.Num                  (Num ((*)))
 import           GHC.Real                 (Integral (div, mod))
+import           Model                    (Episode, Platform, Podcast)
 import           Network.HTTP.Media       ((//), (/:))
-import           Servant.API              (Raw, (:<|>) (..), (:>), Get, JSON, Post,
-                                           ReqBody)
+import           Servant.API              ((:<|>) (..), (:>), Get, JSON, Post,
+                                           Raw, ReqBody)
 import           Servant.API.Capture      (Capture)
 import           Servant.API.ContentTypes (Accept (..), MimeRender (..),
                                            MimeUnrender (..))
 import           Text.Printf              (printf)
-import           Text.Read                (Read)
-import           Text.Show                (Show)
-import Model (Episode, Platform, Podcast)
 
 type RouteShow = "show" :> Capture "podcast_id" Text :>
   ( "feed.xml" :> Get '[XML] Lazy.ByteString
@@ -61,8 +60,8 @@ type RoutesApi = "api" :>
     )
   )
 
-type RouteGrantAuthPwd  = "login"  :> ReqBody '[JSON] LoginData :> Post '[JSON] (Maybe (CompactJWT, UserInfo))
-type RouteUserNew       = "new"    :> ReqBody '[JSON] UserNew   :> Post '[JSON] (CompactJWT, UserInfo)
+type RouteGrantAuthPwd  = "login"  :> ReqBody '[JSON] LoginData :> Post '[JSON] (Maybe SessionData)
+type RouteUserNew       = "new"    :> ReqBody '[JSON] UserNew   :> Post '[JSON] SessionData
 type RouteDoesUserExist = "exists" :> ReqBody '[JSON] Text      :> Post '[JSON] Bool
 
 type RouteAliasRename     = "rename"       :> ReqBody '[JSON] Text :> Post '[JSON] ()
@@ -77,7 +76,7 @@ data EpisodeNew = EpisodeNew
   { newCustomIndex :: Text
   , newTitle       :: Text
   , newDate        :: Text
-  } deriving (Read, Show, Generic)
+  } deriving (Generic)
 
 instance FromJSON EpisodeNew
 instance ToJSON EpisodeNew
