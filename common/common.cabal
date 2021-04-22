@@ -19,8 +19,6 @@ library
     , reflex-dom
     , servant
     , servant-reflex
-    , servant-snap
-    , snap-core
     , text
     , time
   exposed-modules:
