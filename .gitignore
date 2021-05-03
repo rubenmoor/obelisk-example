@@ -5,6 +5,7 @@
 cabal.project.local
 cabal.sandbox.config
 config/backend/jwk
+deployment/
 ctags
 dist-newstyle/
 dist/
