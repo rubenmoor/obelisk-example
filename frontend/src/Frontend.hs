@@ -346,11 +346,17 @@ htmlHead = do
                <> "rel" =: "stylesheet"
                 ) blank
   -- Font Awesome 5.13 free content -->
-  elAttr "link" ( "rel" =: "stylesheet"
-               <> "href" =: static @"FontAwesome/css/all.min.css"
-                ) blank
+  -- static
+  -- elAttr "link" ( "rel" =: "stylesheet"
+  --              <> "href" =: static @"FontAwesome/css/all.min.css"
+  --               ) blank
+  -- web
+  elAttr "script" ( "src" =: "https://kit.fontawesome.com/63887ea353.js" ) blank
   el "title" $ text "serendipity.works"
-  el "style" $ text $ Lazy.toStrict $ renderWith compact [] cssGeneral
+  elAttr "link" ( "href" =: static @"styles.css"
+               <> "rel" =: "stylesheet"
+                ) blank
+  -- el "style" $ text $ Lazy.toStrict $ renderWith compact [] cssGeneral
 
 frontend :: Frontend (R FrontendRoute)
 frontend = Frontend

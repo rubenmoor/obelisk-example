@@ -51,9 +51,8 @@ import           Servant.Reflex           (reqSuccess)
 import           Shared                   (iFa)
 import           State                    (EStateUpdate, Session (..),
                                            State (..))
+import Text.Regex.TDFA ((=~))
 import           Text.Printf              (printf)
-import           Text.RawString.QQ        (r)
-import           Text.Regex.TDFA          ((=~))
 import qualified Text.URI                 as URI
 
 pagePodcastView
@@ -131,7 +130,9 @@ makeClickableLinks
   -> m ()
 makeClickableLinks str =
     let (prefix, _ :: Text, suffix, groups) =
-          str =~ ([r|([[:space:]]|\`)https?://(]|[-a-zA-Z0-9._~%!*'();:@&=+$,/?#[])+|] :: Text)
+          str =~ ("([[:space:]]|\\`)https?://(]|[-a-zA-Z0-9._~%!*\'();:@&=+$,/?#[])+" :: Text)
+          -- raw
+          -- str =~ ([r|([[:space:]]|\`)https?://(]|[-a-zA-Z0-9._~%!*'();:@&=+$,/?#[])+|] :: Text)
     in case groups of
          []       -> text str
          ws:[url] -> do text $ prefix <> ws

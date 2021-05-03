@@ -8,6 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TupleSections        #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-type-defaults #-}
 
 module Handlers
@@ -20,6 +21,7 @@ import           AppData                   (DbAction, EnvApplication (..),
                                             Handler)
 import           Auth                      (UserInfo (..), mkClaims,
                                             mkCompactJWT, verifyCompactJWT)
+import Auth ()
 import           Common                    (EpisodeNew (..), RoutesApi,
                                             convertToFilename, formatDuration)
 import           Common.Auth               (LoginData (..), SessionData (..),

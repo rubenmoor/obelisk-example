@@ -20,7 +20,6 @@ library
     , obelisk-executable-config-lookup
     , obelisk-generated-static
     , obelisk-route
-    , raw-strings-qq
     , reflex-dom
     , regex-tdfa
     , servant

@@ -1,10 +1,10 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts          #-}
 {-# LANGUAGE KindSignatures            #-}
 {-# LANGUAGE NoImplicitPrelude         #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings         #-}
 {-# LANGUAGE Rank2Types                #-}
+{-# LANGUAGE RecordWildCards           #-}
 
 module Client where
 
@@ -41,7 +41,7 @@ getAuthData
   -> Dynamic t (Either Text (CompactJWT, Text))
 getAuthData dynState =
   ffor dynState $ \st -> case stSession st of
-    SessionAnon        -> Left "not logged in"
+    SessionAnon                 -> Left "not logged in"
     SessionUser SessionData{..} -> Right (sdJwt, sdAliasName)
 
 postAuthenticate

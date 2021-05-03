@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleContexts      #-}
@@ -8,11 +10,16 @@
 {-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE UndecidableInstances #-}
 
-module Auth where
+module Auth
+  ( module Auth
+  , module Common.Auth
+  ) where
 
-import           Common.Auth          (AuthServerData, CompactJWT (CompactJWT),
-                                       SessionData (..), AuthProtect)
+import           Common.Auth          (AuthProtect,
+                                       CompactJWT (CompactJWT),
+                                       SessionData (..))
 import           Control.Applicative  (Applicative (pure))
 import           Control.Category     (Category ((.)))
 import           Control.Lens         ((?~), (^.), (^?), _Just)
@@ -39,9 +46,19 @@ import qualified Data.Text            as Text
 import qualified Data.Text.Encoding   as Text
 import           Data.Time            (UTCTime, addUTCTime)
 import           Database.Gerippe     (Key)
+import           DbAdapter            (Alias (..))
 import           GHC.Generics         (Generic)
 import           Model                (Rank)
-import DbAdapter (Alias (..))
+import Servant.Server (HasContextEntry(getContextEntry),  HasServer (..))
+import Snap.Core (Request, Snap)
+import Servant.API ((:>))
+import Data.Proxy (Proxy(Proxy))
+import Servant.Server.Internal (withRequest, addAuthCheck, DelayedM)
+import Control.Monad.IO.Class (MonadIO(liftIO))
+import Snap.Internal.Core (evalSnap)
+import GHC.Base (($!))
+import GHC.Exts (seq)
+import GHC.TypeLits (KnownSymbol)
 
 audience :: StringOrURI
 audience = "https://www.serendipity.works"
@@ -93,4 +110,22 @@ mkSessionData jwt UserInfo{..} =
       sdClearances = uiClearances
   in  SessionData{..}
 
-type instance AuthServerData (AuthProtect "jwt") = UserInfo
+instance ( KnownSymbol tag
+         , HasServer api context m
+         , HasContextEntry context (Snap UserInfo)
+         )
+  => HasServer (AuthProtect tag :> api) context m where
+
+  type ServerT (AuthProtect tag :> api) context m =
+    UserInfo -> ServerT api context m
+
+  hoistServerWithContext _ pc nt s = hoistServerWithContext (Proxy :: Proxy api) pc nt . s
+
+  route (Proxy :: Proxy (AuthProtect tag :> api)) context subserver =
+    route (Proxy :: Proxy api) context (subserver `addAuthCheck` withRequest authCheck)
+      where
+        authCheck :: Request -> DelayedM m UserInfo
+        authCheck =
+          liftIO . evalSnap (getContextEntry context)
+                            (\x -> pure $! (x `seq` ()))
+                            (\f -> let !_ = f 0 in pure ())

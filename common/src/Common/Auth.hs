@@ -1,4 +1,3 @@
-{-# LANGUAGE BangPatterns               #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE DeriveDataTypeable         #-}
 {-# LANGUAGE DeriveGeneric              #-}
@@ -19,12 +18,10 @@ module Common.Auth
   , LoginData (..)
   , UserNew (..)
   , AuthProtect
-  , AuthServerData
   , SessionData (..)
   ) where
 
 import           Control.Arrow           (ArrowChoice ((+++)))
-import           Control.Monad.IO.Class  (MonadIO (liftIO))
 import           Data.Aeson              (FromJSON, ToJSON)
 import           Data.Map                (Map)
 import           Data.Maybe              (fromMaybe)
@@ -36,14 +33,9 @@ import           Data.Typeable           (Typeable)
 import           GHC.Generics            (Generic)
 import           Model                   (Rank)
 import           Reflex.Dom              (splitDynPure, Reflex (Dynamic))
-import           Servant                 (HasContextEntry (getContextEntry))
 import           Servant.API             ((:>))
 import           Servant.Common.Req      (addHeader)
 import           Servant.Reflex          (HasClient (..))
-import           Servant.Server          (HasServer (..))
-import           Servant.Server.Internal (DelayedM, addAuthCheck, withRequest)
-import           Snap.Core               (Request, Snap)
-import           Snap.Internal.Core      (evalSnap)
 import           Web.HttpApiData         (FromHttpApiData (..),
                                           ToHttpApiData (..))
 
@@ -94,27 +86,6 @@ instance (HasClient t m api tag, Reflex t)
         (token, alias) = splitDynPure $ switchEither <$> authData
         req' = addHeader "Authorization" token $
                addHeader "X-Alias" alias req
-
-instance ( HasServer api context m
-         , HasContextEntry context (Snap (AuthServerData (AuthProtect tag)))
-         )
-  => HasServer (AuthProtect tag :> api) context m where
-
-  type ServerT (AuthProtect tag :> api) context m =
-    AuthServerData (AuthProtect tag) -> ServerT api context m
-
-  hoistServerWithContext _ pc nt s = hoistServerWithContext (Proxy :: Proxy api) pc nt . s
-
-  route (Proxy :: Proxy (AuthProtect tag :> api)) context subserver =
-    route (Proxy :: Proxy api) context (subserver `addAuthCheck` withRequest authCheck)
-      where
-        authCheck :: Request -> DelayedM m (AuthServerData (AuthProtect tag))
-        authCheck =
-          liftIO . evalSnap (getContextEntry context)
-                            (\x -> pure $! (x `seq` ()))
-                            (\f -> let !_ = f 0 in pure ())
-
-type family AuthServerData a :: *
 
 data SessionData = SessionData
   { sdJwt :: CompactJWT
