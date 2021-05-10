@@ -13,20 +13,15 @@
 
 module Frontend where
 
-import qualified Data.Text.Lazy.Encoding     as Lazy
-import           Obelisk.Frontend            (Frontend (..), ObeliskWidget)
-import           Obelisk.Generated.Static    (static)
-import           Obelisk.Route               (pattern (:/), R)
 import           Clay                        (Center (center), Cursor (cursor),
                                               None (none), absolute, alignItems,
                                               backgroundColor, block, color,
-                                              compact, darkgray, display, em,
+                                              darkgray, display, em,
                                               fontSizeCustom, inlineFlex,
                                               justifyContent, marginLeft,
                                               marginRight, minHeight, padding,
-                                              pointer, position, px, renderWith,
-                                              right, smaller, textAlign, white,
-                                              zIndex)
+                                              pointer, position, px, right,
+                                              smaller, textAlign, white, zIndex)
 import           Client                      (getAuthData, postPodcastNew,
                                               request)
 import           Common.Auth                 (SessionData (..))
@@ -46,46 +41,38 @@ import           Data.Maybe                  (Maybe (..), fromMaybe, maybe)
 import           Data.Monoid                 ((<>))
 import           Data.Text                   (Text, unwords)
 import qualified Data.Text.Lazy              as Lazy
+import qualified Data.Text.Lazy.Encoding     as Lazy
 import           Data.Tuple                  (fst)
 import           Data.Witherable             (Filterable (mapMaybe))
 import           GHCJS.DOM                   (currentWindowUnchecked)
 import           GHCJS.DOM.Storage           (getItem, setItem)
 import           GHCJS.DOM.Window            (getLocalStorage)
 import           Language.Javascript.JSaddle (liftJSM)
-import           MediaQuery                  (ResponsiveClass (rcClass),
-                                              onDesktopBorder,
-                                              onDesktopDisplayImportant,
-                                              onDesktopDisplayNone,
-                                              onDesktopMkOverlay,
-                                              onMobileAtBottom,
-                                              onMobileDisplayNone,
-                                              onMobileFontBig, onMobileHeight80,
-                                              onMobileMkOverlay,
-                                              onMobileWidthAuto, respClass,
-                                              respClasses)
+import           Obelisk.Frontend            (Frontend (..), ObeliskWidget)
+import           Obelisk.Generated.Static    (static)
+import           Obelisk.Route               (R, pattern (:/))
 import           Obelisk.Route.Frontend      (RouteToUrl, RoutedT, SetRoute,
                                               mapRoutedT, routeLink, subRoute_)
+import           PagesPodcast                (pagePodcastView)
 import           PagesUser                   (pageAliasRename, pageAliasSelect,
                                               pageLogin, pageRegister)
-import           Reflex.Dom                  (elAttr, text, el, blank, DomBuilder (inputElement),
-                                              EventName (Click),
+import           Reflex.Dom                  (elDynClass', DomBuilder, EventName (Click),
                                               EventWriter (tellEvent),
                                               HasDomEvent (domEvent), MonadHold,
                                               PerformEvent (..), PostBuild,
                                               Prerender (prerender),
                                               Reflex (Dynamic, never, updated),
-                                              dyn, dyn_, elAttr', elDynAttr',
-                                              ffor, foldDyn, foldDynMaybe,
-                                              leftmost, prerender_,
-                                              runEventWriterT, switchHold,
-                                              tailE, widgetHold_, (.~), (=:))
+                                              blank, dyn, dyn_, el, elAttr,
+                                              elAttr', elDynAttr', ffor,
+                                              foldDyn, foldDynMaybe, leftmost,
+                                              prerender_, runEventWriterT,
+                                              switchHold, tailE, text,
+                                              widgetHold_, (=:))
 import           Route                       (FrontendRoute (..))
 import           Servant.Common.Req          (reqSuccess)
-import           Shared                      (btnSend, cssGeneral, elLabelInput,
-                                              iFa, iFa', navBorder, style)
+import           Shared                      (btnSend, elLabelInput, iFa, iFa')
 import           State                       (EStateUpdate (..), Session (..),
                                               State (..))
-import PagesPodcast (pagePodcastView)
 
 pageHome
   :: forall t (m :: * -> *)
@@ -129,32 +116,22 @@ navigation
   , MonadReader (Dynamic t State) m
   ) => m ()
 navigation = do
-  let cssNav = do
-        -- textAlign center
-        backgroundColor white
-        navBorder
-        cursor pointer
-        minHeight $ px 60
-      divNavBar = elAttr "div" ("class" =: unwords
+  let divNavBar = elAttr "div" ("class" =: unwords
         [ "row"
-        , rcClass onMobileAtBottom
-        , rcClass onMobileFontBig
-        ] <> style (do textAlign center
-                       backgroundColor white
-                       zIndex 2
-                   ))
+        , "onMobileAtBottom"
+        , "onMobileFontBig"
+        , "navBar"
+        ])
   dynSession <- asks $ fmap stSession
   divNavBar $ mdo
-    let navButtonAttrs = ffor displayNav $ \d ->
-             "class" =: unwords [ "col-2"
-                                , rcClass onMobileHeight80
-                                , rcClass onDesktopDisplayImportant
-                                ]
-          <> style (do cssNav
-                       display d
-                       zIndex 2
-                   )
-        spanNavBtn = fmap fst . elDynAttr' "span" navButtonAttrs
+    let navButtonCls = ffor displayNav $ \cls -> unwords
+          [ "col-2"
+          , "onMobileHeight80"
+          , "onDesktopDisplayImportant"
+          , "navButton"
+          , cls
+          ]
+        spanNavBtn = fmap fst . elDynClass' "span" navButtonCls
     eBtns <- dyn $ ffor dynSession $ \case
       SessionAnon -> do
         elLogin <- routeLink (FrontendRoute_Login :/ ()) $
@@ -166,12 +143,7 @@ navigation = do
         elSettings <- routeLink (FrontendRoute_Settings :/ ()) $
           spanNavBtn $ text "Settings"
         elLogout <- spanNavBtn $ do
-          let alias = sdAliasName
-              css = style $ do
-                color darkgray
-                fontSizeCustom smaller
-                marginRight $ em 0.5
-          elAttr "span" css $ text alias
+          elAttr "span" ("class" =: "btnLogoutAlias") $ text sdAliasName
           text "Logout"
         let eLogout = domEvent Click elLogout
         tellEvent $ eLogout $> EStateUpdate (\s -> s { stSession = SessionAnon })
@@ -180,27 +152,22 @@ navigation = do
 
     let spanNavBtnHome = fmap fst . elAttr' "span"
           ("class" =: unwords [ "col-2"
-                              , rcClass onMobileWidthAuto
-                              , rcClass $ onDesktopBorder navBorder
-                              ]
-          <> style (do minHeight $ px 60
-                       display inlineFlex
-                       alignItems center
-                       justifyContent center
-                   ))
+                              , "onMobileWidthAuto"
+                              , "onDesktopBorder"
+                              , "navBtnHome"
+                              ])
     elHome <- routeLink (FrontendRoute_Main :/ ()) $
       spanNavBtnHome $ do
         iFa "fas fa-home"
-        elAttr "span" (respClass onMobileDisplayNone <> style (marginLeft $ em 0.5)) $ text "Home"
+        elAttr "span" ("class" =: "onMobileDisplayNone"
+                    <> "style" =: "margin-left:0.5em") $ text "Home"
         blank
 
     let spanNavBars =
-          elAttr "span" (
-               respClasses [onDesktopDisplayNone]
-            <> style (do position absolute
-                         right (px 0)
-                         padding (px 0) (px 8) (px 0) (px 8)
-                         ))
+          elAttr "span" ("class" =: unwords
+            [ "onDesktopDisplayNone"
+            , "navBars"
+            ])
     elBars <- spanNavBars $ iFa' "fas fa-bars"
 
     let eHome = domEvent Click elHome
@@ -213,7 +180,7 @@ navigation = do
                , eExit $> False
                , eHome $> False
                ]
-    let displayNav = bool none block <$> dynToggle
+    let displayNav = bool "displayNone" "displayBlock" <$> dynToggle
     blank
 
 htmlBody
@@ -257,16 +224,9 @@ htmlBody = mdo
   blank
   where
     loadingScreen =
-      let cls = respClasses
-            [ onMobileMkOverlay
-            , onDesktopMkOverlay
-            ]
-          css = do backgroundColor white
-                   padding (px 24) (px 24) (px 24) (px 24)
-                   position absolute
-      in  elAttr "div" (cls <> style css) $ do
-            iFa "fas fa-spinner fa-spin"
-            text " Loading ..."
+      elAttr "div" ("class" =: "mkOverlay") $ do
+        iFa "fas fa-spinner fa-spin"
+        text " Loading ..."
 
     -- TODO: replace with home component
     -- el "h1" $ text "Create new episode"
@@ -338,6 +298,10 @@ htmlHead = do
                 ) blank
   elAttr "meta" ( "name" =: "viewport"
                <> "content" =: "width=device-width, initial-scale=1.0"
+                ) blank
+  elAttr "link" ( "rel" =: "icon"
+               <> "type" =: "image/x-icon"
+               <> "href" =: static @"favicon.ico"
                 ) blank
   elAttr "link" ( "rel" =: "preconnect"
                <> "href" =: "https://fonts.gstatic.com"

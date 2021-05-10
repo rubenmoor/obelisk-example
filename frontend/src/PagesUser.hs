@@ -62,8 +62,7 @@ import           Reflex.Dom             (DomBuilder (inputElement),
                                          widgetHold_, zipDyn, (.~), (=:))
 import           Route                  (FrontendRoute (..))
 import           Servant.Common.Req     (reqFailure, reqSuccess)
-import           Shared                 (btnSend, checkbox, elLabelInput, iFa,
-                                         style)
+import           Shared                 (btnSend, checkbox, elLabelInput, iFa)
 import           State                  (EStateUpdate (..), Session (..),
                                          State (..))
 import Data.Tuple (snd)
@@ -76,16 +75,9 @@ divOverlay
   , Prerender js t m
   ) => m a -> m a
 divOverlay inner =
-  let cls = respClasses
-        [ onMobileMkOverlay
-        , onDesktopMkOverlay
-        ]
-      css = do backgroundColor white
-               padding (px 24) (px 24) (px 24) (px 24)
-               position absolute
-               zIndex 1
-  in  elAttr "div" (cls <> style css) $ do
-        let spanClose = elAttr "span" (style $ float floatRight) $ iFa "fas fa-times"
+  let cls = "class" =: "mkOverlay"
+  in  elAttr "div" cls $ do
+        let spanClose = elAttr "span" ("style" =: "float:right") $ iFa "fas fa-times"
         routeLink (FrontendRoute_Main :/ ()) spanClose
         inner
 
@@ -116,9 +108,9 @@ pageRegister =
                                \ Password reset via email can be optionally added later."
     let widgetUserExists =
           widgetHold_ blank $ ffor (filter id eUserExists) $ \_ ->
-            elAttr "span" (style $ color red) $ text "username already exists"
+            elAttr "span" ("style" =: "color:red") $ text "username already exists"
     widgetHold_ widgetUserExists $ ffor (mapMaybe reqFailure response) $ \strErr ->
-      elAttr "span" (style $ color red) $ text strErr
+      elAttr "span" ("style" =: "color:red") $ text strErr
     eSend <- btnSend $ text "Send"
     let eFocusLost = void $ filter not $ updated $ _inputElement_hasFocus iUserName
         eUserName = maybe (Left "user empty") Right <$> userName
@@ -152,7 +144,7 @@ pageLogin =
     (password, inputPwd) <- elLabelInput def "Password" "password"
     widgetHold_ blank $ ffor success $ \case
       Just _ -> blank
-      Nothing -> elAttr "span" (style $ color red) $ text "wrong password"
+      Nothing -> elAttr "span" ("style" =: "color:red") $ text "wrong password"
     eSend <- btnSend $ text "Login"
     let eEnter = keypress Enter inputPwd
         eLoginData = ffor (zipDyn userName password) $ \case
@@ -188,10 +180,7 @@ pageAliasSelect = do
   let loading = do
         iFa "fas fa-spinner fa-spin"
         text " Loading ..."
-      css = style $ do
-        border solid (px 1) lightgrey
-        padding (px 8) (px 8) (px 8) (px 8)
-        maxWidth (em 32)
+      css = "style" =: "aliasSelect"
   authData <- asks getAuthData
   divOverlay $ do
     eAliases <- mapMaybe reqSuccess <$>
