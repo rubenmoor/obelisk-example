@@ -33,7 +33,6 @@ library
       Client
     , PagesPodcast
     , PagesUser
-    , MediaQuery
     , Shared
     , State
   ghc-options: -Wall -Wredundant-constraints -Wincomplete-uni-patterns -Wincomplete-record-updates -O -fno-show-valid-hole-fits

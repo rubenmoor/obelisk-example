@@ -16,10 +16,6 @@ module PagesUser
   , pageAliasRename
   ) where
 
-import           Clay                   (absolute, backgroundColor, border,
-                                         color, em, float, floatRight,
-                                         lightgrey, maxWidth, padding, position,
-                                         px, red, solid, white, zIndex)
 import           Client                 (getAuthData, getAliasAll, postAliasRename,
                                          postAliasSetDefault, postAuthNew,
                                          postAuthenticate, postDoesUserExist,
@@ -39,9 +35,6 @@ import           Data.Semigroup         (Semigroup ((<>)))
 import           Data.Traversable       (forM)
 import           Data.Witherable        (Filterable (catMaybes, mapMaybe),
                                          filter)
-import           MediaQuery             (onDesktopMaxWidth370px,
-                                         onDesktopMkOverlay, onMobileMkOverlay,
-                                         respClass, respClasses)
 import           Obelisk.Route          (pattern (:/), R)
 import           Obelisk.Route.Frontend (RouteToUrl, SetRoute (..), routeLink)
 import           Reflex.Dom             (DomBuilder (inputElement),
@@ -93,7 +86,7 @@ pageRegister
   ) =>  m ()
 pageRegister =
   divOverlay $ mdo
-    let divFieldDescription = elAttr "div" $ respClass onDesktopMaxWidth370px
+    let divFieldDescription = elAttr "div" $ "class" =: "onDesktopMaxWidth370px"
     (userName, iUserName) <- elLabelInput def "Username" "username"
     divFieldDescription $ text "Your user name is not publicly visible. You \
                                \can choose your public alias in the next step."

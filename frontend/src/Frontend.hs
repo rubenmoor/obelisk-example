@@ -13,15 +13,6 @@
 
 module Frontend where
 
-import           Clay                        (Center (center), Cursor (cursor),
-                                              None (none), absolute, alignItems,
-                                              backgroundColor, block, color,
-                                              darkgray, display, em,
-                                              fontSizeCustom, inlineFlex,
-                                              justifyContent, marginLeft,
-                                              marginRight, minHeight, padding,
-                                              pointer, position, px, right,
-                                              smaller, textAlign, white, zIndex)
 import           Client                      (getAuthData, postPodcastNew,
                                               request)
 import           Common.Auth                 (SessionData (..))
