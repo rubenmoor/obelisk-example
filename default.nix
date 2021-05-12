@@ -44,7 +44,7 @@ in
     android.displayName = "Obelisk Minimal Example";
     ios.bundleIdentifier = "systems.obsidian.obelisk.examples.minimal";
     ios.bundleName = "Obelisk Minimal Example";
-    staticFiles = import ./static.nix { inherit pkgs; };
+    # staticFiles = import ./static.nix { inherit pkgs; };
     overrides = self: super: {
       gerippe = pkgs.haskell.lib.dontHaddock (self.callCabal2nix "gerippe" (pkgs.fetchFromGitHub {
         owner = "rubenmoor";

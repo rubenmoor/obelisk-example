@@ -8,7 +8,6 @@ library
   build-depends:
       base
     , aeson
-    , clay
     , common
     , containers
     , data-default
