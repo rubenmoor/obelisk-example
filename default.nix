@@ -85,6 +85,18 @@ let password-repo = pkgs.fetchFromGitHub {
         groups.${group} = {};
       };
     };
+    server = { exe, hostName, adminEmail, routeHost, enableHttps, version }@args:
+      let
+        nixos = import (pkgs.path + /nixos);
+      in nixos {
+        system = "x86_64-linux";
+        configuration = {
+          imports = [
+            (obelisk.serverModules.mkBaseEc2 args)
+            (mkObeliskApp args)
+          ];
+        };
+      };
     obelisk = (import ./.obelisk/impl {
       reflex-platform-func = args@{ ... }: (import reflex-platform-hls) (args // {
           inherit system;
@@ -101,7 +113,7 @@ let password-repo = pkgs.fetchFromGitHub {
       # config.android_sdk.accept_license = false;
 
       terms.security.acme.acceptTerms = true;
-    }) // { inherit mkObeliskApp; };
+    }) // { inherit server; };
 in
   with obelisk;
   with pkgs.haskell.lib;
