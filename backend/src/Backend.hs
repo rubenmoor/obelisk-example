@@ -16,7 +16,7 @@ import           Route                           (BackendRoute (..),
 
 import           AppData                         (EnvApplication (..))
 import           Auth                            (UserInfo)
-import           Common                          (RouteMedia, RouteShow,
+import           Common                          (RouteShow,
                                                   RoutesApi)
 import           Config                          (Params (..))
 import           Control.Applicative             (Applicative (pure))
@@ -24,7 +24,6 @@ import           Control.Monad.Logger            (NoLoggingT (..))
 import           Control.Monad.Reader            (ReaderT (runReaderT))
 import           Control.Monad.Trans             (MonadIO (liftIO))
 import           Control.Monad.Trans.Resource    (runResourceT)
-import           Crypto.JWT                      (JWK)
 import           Data.Aeson                      (FromJSON)
 import qualified Data.Aeson                      as Aeson
 import           Data.Function                   (($))
@@ -42,7 +41,7 @@ import           DbAdapter                       (migrateAll)
 import           Handlers                        (handleFeedXML, handlers,
                                                   mkContext)
 import           Obelisk.Backend                 (Backend (..))
-import           Obelisk.Configs                 (ConfigsT,
+import           Obelisk.Configs                 (getTextConfig, ConfigsT,
                                                   HasConfigs (getConfig),
                                                   runConfigsT)
 import           Obelisk.ExecutableConfig.Lookup (getConfigs)
@@ -65,10 +64,12 @@ backend :: Backend BackendRoute FrontendRoute
 backend = Backend
   { _backend_run = \serve -> do
     cfgs <- getConfigs
-    (Params{..}, jwk :: JWK) <- runConfigsT cfgs $ do
+    (Params{..}, jwk, url) <- runConfigsT cfgs $ do
       params <- getConfigOrExit "backend/params"
       jwk <- getConfigOrExit "backend/jwk"
-      pure (params, jwk)
+      mUrl <- getTextConfig "common/route"
+      url <- maybe (exitWithFailure "config common/route not found") pure mUrl
+      pure (params, jwk, url)
     let connectInfo = defaultConnectInfo
           { connectHost = paramDbHost
           , connectUser = paramDbUser
@@ -82,7 +83,7 @@ backend = Backend
       let env = EnvApplication
             { envPool      = pool
             , envMediaDir  = paramMediaDir
-            , envUrl       = paramUrl
+            , envUrl       = url
             , envJwk       = jwk
             }
           ctx = mkContext jwk pool
@@ -96,10 +97,11 @@ backend = Backend
 
 getConfigOrExit :: forall a. FromJSON a => Text -> ConfigsT IO a
 getConfigOrExit filename = do
-  mStr <- getConfig filename
-  str <- maybe (exitWithFailure $ "config " <> filename <> " not found") pure mStr
-  maybe (exitWithFailure $ "could not decode " <> filename) pure $ Aeson.decodeStrict str
-  where
-    exitWithFailure msg = liftIO $ do
-      putStrLn msg
-      exitWith $ ExitFailure 1
+    mStr <- getConfig filename
+    str <- maybe (exitWithFailure $ "config " <> filename <> " not found") pure mStr
+    maybe (exitWithFailure $ "could not decode " <> filename) pure $ Aeson.decodeStrict str
+
+exitWithFailure :: MonadIO m => Text -> m a
+exitWithFailure msg = liftIO $ do
+  putStrLn msg
+  exitWith $ ExitFailure 1

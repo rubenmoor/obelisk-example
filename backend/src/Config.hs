@@ -7,7 +7,6 @@ module Config
 
 import           Data.Aeson   (FromJSON)
 import           Data.String  (String)
-import           Data.Text    (Text)
 import           GHC.Generics (Generic)
 import System.IO (FilePath)
 
@@ -17,7 +16,6 @@ data Params = Params
   , paramDbPassword :: String
   , paramDbDatabase :: String
   , paramMediaDir   :: FilePath
-  , paramUrl        :: Text
   }
   deriving (Generic)
 
