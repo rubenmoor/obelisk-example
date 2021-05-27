@@ -58,7 +58,7 @@ let password-repo = pkgs.fetchFromGitHub {
       };
       systemd.services.${name} = {
         wantedBy = [ "multi-user.target" ];
-        after = [ "network.target" ];
+        after = [ "mysql.service" ];
         restartIfChanged = true;
         path = [ pkgs.gnutar ];
         script = ''
