@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric         #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Model
   ( module Model

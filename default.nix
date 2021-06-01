@@ -20,71 +20,6 @@ let password-repo = pkgs.fetchFromGitHub {
       rev = "a9cd44d288395092fdaa76a6a7f146049cc21f15";
       sha256 = "1nfzls18cs0a1a0d3xiiidsl0n6clcf5z9i8b78yj1k8hdc6k1fh";
     };
-    mkObeliskApp =
-      { exe
-      , routeHost
-      , enableHttps
-      , name ? "backend"
-      , user ? name
-      , group ? user
-      , baseUrl ? "/"
-      , internalPort ? 8000
-      , backendArgs ? "--port=${toString internalPort}"
-      , ...
-      }: {...}: {
-      services.nginx = {
-        enable = true;
-        virtualHosts."${routeHost}" = {
-          enableACME = enableHttps;
-          forceSSL = enableHttps;
-          locations.${baseUrl} = {
-            proxyPass = "http://127.0.0.1:" + toString internalPort;
-            proxyWebsockets = true;
-          };
-        };
-      };
-      services.mysql = {
-        enable = true;
-        package = pkgs.mariadb;
-        initialDatabases = [ { name = "podcast"; } ];
-        ensureUsers = [ {
-          name = user;
-          ensurePermissions = { "podcast.*" = "ALL PRIVILEGES"; };
-        } ];
-        settings.mysqld = {
-          character-set-server = "utf8mb4";
-          collation-server = "utf8mb4_unicode_ci";
-        };
-      };
-      systemd.services.${name} = {
-        wantedBy = [ "multi-user.target" ];
-        after = [ "mysql.service" ];
-        restartIfChanged = true;
-        path = [ pkgs.gnutar ];
-        script = ''
-          ln -sft . '${exe}'/*
-          mkdir -p log
-          exec ./backend ${backendArgs} </dev/null
-        '';
-        serviceConfig = {
-          User = user;
-          KillMode = "process";
-          WorkingDirectory = "~";
-          Restart = "always";
-          RestartSec = 5;
-        };
-      };
-      users = {
-        users.${user} = {
-          description = "${user} service";
-          home = "/var/lib/${user}";
-          createHome = true;
-          isSystemUser = true;
-          group = group;
-        };
-        groups.${group} = {};
-      };
-    };
     obelisk = (import ./.obelisk/impl {
       reflex-platform-func = args@{ ... }: (import reflex-platform-hls) (args // {
           inherit system;
@@ -101,7 +36,7 @@ let password-repo = pkgs.fetchFromGitHub {
       # config.android_sdk.accept_license = false;
 
       terms.security.acme.acceptTerms = true;
-    }) // { serverModules.mkObeliskApp = mkObeliskApp; };
+    });
 in
   with obelisk;
   with pkgs.haskell.lib;

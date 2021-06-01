@@ -54,7 +54,7 @@ import           Reflex.Dom                  (elDynClass', DomBuilder, EventName
                                               Prerender (prerender),
                                               Reflex (Dynamic, never, updated),
                                               blank, dyn, dyn_, el, elAttr,
-                                              elAttr', elDynAttr', ffor,
+                                              elAttr', ffor,
                                               foldDyn, foldDynMaybe, leftmost,
                                               prerender_, runEventWriterT,
                                               switchHold, tailE, text,

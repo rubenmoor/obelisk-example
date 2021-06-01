@@ -31,7 +31,6 @@ import           Data.Either            (Either (..), either)
 import           Data.Function          (($), (&))
 import           Data.Functor           (Functor(fmap), void, ($>), (<$>))
 import           Data.Maybe             (Maybe (Just, Nothing), maybe)
-import           Data.Semigroup         (Semigroup ((<>)))
 import           Data.Traversable       (forM)
 import           Data.Witherable        (Filterable (catMaybes, mapMaybe),
                                          filter)

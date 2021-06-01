@@ -39,20 +39,19 @@ import           Model                    (Episode (..), Platform (..),
                                            Rank (..))
 import           Obelisk.Generated.Static (static)
 import           Obelisk.Route.Frontend   (R, RouteToUrl, Routed (askRoute),
-                                           RoutedT, SetRoute)
+                                           SetRoute)
 import           Reflex.Dom               (DomBuilder, EventWriter, MonadHold,
                                            PostBuild (getPostBuild), Prerender,
-                                           Reflex (Dynamic, Event, never),
-                                           blank, dyn_, el, elAttr, elClass,
-                                           ffor, switchHold, text, widgetHold_,
-                                           zipDyn, (=:))
+                                           Reflex (Dynamic), blank, dyn_, el,
+                                           elAttr, elClass, ffor, text,
+                                           widgetHold_, zipDyn, (=:))
 import           Route                    (FrontendRoute, PodcastIdentifier (unPodcastIdentifier))
 import           Servant.Reflex           (reqSuccess)
 import           Shared                   (iFa)
 import           State                    (EStateUpdate, Session (..),
                                            State (..))
-import Text.Regex.TDFA ((=~))
 import           Text.Printf              (printf)
+import           Text.Regex.TDFA          ((=~))
 import qualified Text.URI                 as URI
 
 pagePodcastView
