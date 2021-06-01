@@ -151,18 +151,20 @@ in rec {
         enable = true;
         package = pkgs.mariadb;
         initialDatabases = [ { name = "podcast"; } ];
-        ensureUsers = [ {
-          name = user;
-          ensurePermissions = { "podcast.*" = "ALL PRIVILEGES"; };
-        }];
+        ensureUsers = [
+          {
+            name = user;
+            ensurePermissions = { "podcast.*" = "ALL PRIVILEGES"; };
+          }
+        ];
         extraOptions = ''
-          character-set-server = "utf8mb4";
-          collation-server = "utf8mb4_unicode_ci";
+          character-set-server = utf8mb4
+          collation-server = utf8mb4_unicode_ci
         '';
       };
       systemd.services.${name} = {
         wantedBy = [ "multi-user.target" ];
-        after = [ "network.target" ];
+        after = [ "network.target" "mysql.service" ];
         restartIfChanged = true;
         path = [ pkgs.gnutar ];
         script = ''
