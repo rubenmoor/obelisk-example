@@ -31,7 +31,7 @@ Note: The `--no-interpret` flag became necessary after I forked obelisk with
 
     > ob thunk unpack ./.obelisk/impl
 
-in order to apply local changes.
+in order to apply local changes to the obelisk library code.
 These changes add a `mysql` service to the deployment
 and do not affect obelisk at all.
 
