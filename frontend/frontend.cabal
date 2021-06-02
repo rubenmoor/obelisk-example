@@ -11,8 +11,10 @@ library
     , common
     , containers
     , data-default
+    , generic-lens
     , ghcjs-dom
     , jsaddle
+    , lens
     , modern-uri
     , mtl
     , obelisk-frontend

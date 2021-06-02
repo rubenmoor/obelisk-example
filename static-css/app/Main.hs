@@ -63,6 +63,14 @@ main = putCss $ do
     position absolute
     zIndex 1
 
+  ".msgOverlay" ? do
+    backgroundColor anthrazit
+    color lightgrey
+    fontSize (pt 12)
+    padding (px 12) (px 12) (px 12) (px 12)
+    position absolute
+    zIndex 0
+
   desktopOnly $ do
     ".col-1"  ? width (pct 8.33)
     ".col-2"  ? width (pct 16.66)
@@ -89,6 +97,12 @@ main = putCss $ do
       left $ pct 50
       transform (translate (pct $ -50) $ pct $ -50)
       maxWidth $ px 418
+    ".msgOverlay" ? do
+      bottom $ px 0
+      left $ pct 50
+      transform (translate (pct $ -50) $ pct 0)
+      maxWidth $ px 418
+      myBorderRadius
     ".onDesktopMaxWidth370px" ? maxWidth (px 370)
 
 
@@ -109,6 +123,7 @@ main = putCss $ do
     outline none (px 0) gray
     myBorderRadius
     transition "all" (sec 0.3) easeInOut (sec 0)
+    width (pct 100)
   input # focus ? do
     myBorderRadius
     boxShadow [bsColor neonpink $ shadowWithBlur (px 0) (px 0) (px 5)]
@@ -141,7 +156,9 @@ main = putCss $ do
       height $ pct 100
       top $ px 0
       important $ paddingBottom $ px 100
-    ".onMobileWidthFull" ? width (pct 100)
+    ".msgOverlay" ? do
+      width $ pct 100
+      bottom $ px 100
 
   button # ".btnSend" ? do
     width $ pct 100

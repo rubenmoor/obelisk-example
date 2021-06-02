@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE KindSignatures      #-}
@@ -6,8 +6,10 @@
 {-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternSynonyms     #-}
+{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE RecursiveDo         #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 
 module PagesUser
   ( pageRegister
@@ -16,48 +18,51 @@ module PagesUser
   , pageAliasRename
   ) where
 
-import           Client                 (getAuthData, getAliasAll, postAliasRename,
-                                         postAliasSetDefault, postAuthNew,
-                                         postAuthenticate, postDoesUserExist,
-                                         request)
+import           Client                 (getAliasAll, getAuthData,
+                                         postAliasRename, postAliasSetDefault,
+                                         postAuthNew, postAuthenticate,
+                                         postDoesUserExist, request)
 import           Common.Auth            (LoginData (..), SessionData (..),
                                          UserNew (..))
 import           Control.Applicative    (Applicative (pure))
 import           Control.Category       (Category (id, (.)))
+import           Control.Lens.Setter    ((?~), set, (.~))
 import           Control.Monad.Fix      (MonadFix)
-import           Control.Monad.Reader   (asks, MonadReader)
+import           Control.Monad.Reader   (MonadReader, asks)
 import           Data.Bool              (Bool (..), bool, not)
 import           Data.Either            (Either (..), either)
 import           Data.Function          (($), (&))
-import           Data.Functor           (Functor(fmap), void, ($>), (<$>))
+import           Data.Functor           (Functor (fmap), void, ($>), (<$>))
+import           Data.Generics.Product  (field)
 import           Data.Maybe             (Maybe (Just, Nothing), maybe)
 import           Data.Traversable       (forM)
+import           Data.Tuple             (snd)
 import           Data.Witherable        (Filterable (catMaybes, mapMaybe),
                                          filter)
 import           Obelisk.Route          (pattern (:/), R)
 import           Obelisk.Route.Frontend (RouteToUrl, SetRoute (..), routeLink)
 import           Reflex.Dom             (DomBuilder (inputElement),
                                          EventName (Click),
-                                         EventWriter (tellEvent),
+                                         EventWriter,
                                          HasDomEvent (domEvent),
                                          InputElement (..), Key (Enter),
                                          MonadHold (holdDyn),
                                          PostBuild (getPostBuild),
                                          Prerender (prerender),
                                          Reflex (Dynamic, never, updated),
-                                         blank, constDyn, def, dyn, dyn_, el,
-                                         elAttr, elAttr',
+                                         XhrResponse (..), blank, constDyn, def,
+                                         dyn, dyn_, el, elAttr, elAttr',
                                          elementConfig_modifyAttributes, ffor,
                                          inputElementConfig_elementConfig,
                                          inputElementConfig_initialValue,
                                          keypress, leftmost, switchHold, text,
-                                         widgetHold_, zipDyn, (.~), (=:))
+                                         widgetHold_, zipDyn, (=:))
 import           Route                  (FrontendRoute (..))
-import           Servant.Common.Req     (reqFailure, reqSuccess)
-import           Shared                 (btnSend, checkbox, elLabelInput, iFa)
+import           Servant.Common.Req     (ReqResult (..), reqSuccess)
+import           Shared                 (btnSend, checkbox, elLabelInput,
+                                         elLabelPasswordInput, iFa, reqFailure, updateState)
 import           State                  (EStateUpdate (..), Session (..),
                                          State (..))
-import Data.Tuple (snd)
 
 divOverlay
   :: forall t js (m :: * -> *) a.
@@ -73,6 +78,7 @@ divOverlay inner =
         routeLink (FrontendRoute_Main :/ ()) spanClose
         inner
 
+-- TODO: bug: on reload on this page, stack overflow
 pageRegister
   :: forall t js (m :: * -> *).
   ( DomBuilder t m
@@ -98,28 +104,24 @@ pageRegister =
     divFieldDescription $ text "You enter your password only once. There are \
                                \no invalid passwords except for an empty one.\
                                \ Password reset via email can be optionally added later."
-    let widgetUserExists =
-          widgetHold_ blank $ ffor (filter id eUserExists) $ \_ ->
-            elAttr "span" ("style" =: "color:red") $ text "username already exists"
-    widgetHold_ widgetUserExists $ ffor (mapMaybe reqFailure response) $ \strErr ->
-      elAttr "span" ("style" =: "color:red") $ text strErr
     eSend <- btnSend $ text "Send"
     let eFocusLost = void $ filter not $ updated $ _inputElement_hasFocus iUserName
         eUserName = maybe (Left "user empty") Right <$> userName
     eUserExists <- mapMaybe reqSuccess <$>
       request (postDoesUserExist eUserName eFocusLost)
+    updateState $ filter id eUserExists $> (field @"stMsg" ?~ "username already exists")
     dynExists <- holdDyn False eUserExists
     let eUserNew = ffor (zipDyn dynExists $ zipDyn userName password) $ \case
           (True, _)             -> Left "username already exists"
           (_, (Just u, Just p)) -> Right $ UserNew u p
           _                     -> Left "all fields are required"
-    response <- request $ postAuthNew eUserNew eSend
-    let success = mapMaybe reqSuccess response
-    tellEvent $ ffor success $ \sd ->
-      EStateUpdate (\s -> s { stSession = SessionUser sd })
+    eResponse <- request $ postAuthNew eUserNew eSend
+    updateState $ set (field @"stSession") . SessionUser <$> mapMaybe reqSuccess eResponse
+    updateState $ set (field @"stMsg") . Just <$> mapMaybe reqFailure eResponse
     -- TODO: store current route in route /register/ to allow going back
-    setRoute $ success $> FrontendRoute_AliasRename :/ ()
+    setRoute $ mapMaybe reqSuccess eResponse $> FrontendRoute_AliasRename :/ ()
 
+-- TODO: bug: 400 user not found is not caught
 pageLogin
   :: forall t js (m :: * -> *).
   ( DomBuilder t m
@@ -127,32 +129,30 @@ pageLogin
   , RouteToUrl (R FrontendRoute) m
   , Prerender js t m
   , MonadHold t m
-  , MonadFix m
   , EventWriter t EStateUpdate m
   ) =>  m ()
 pageLogin =
-  divOverlay $ mdo
+  divOverlay $ do
     (userName, _) <- elLabelInput def "Username" "username"
-    (password, inputPwd) <- elLabelInput def "Password" "password"
-    widgetHold_ blank $ ffor success $ \case
-      Just _ -> blank
-      Nothing -> elAttr "span" ("style" =: "color:red") $ text "wrong password"
+    (password, inputPwd) <- elLabelPasswordInput def "Password" "password"
     eSend <- btnSend $ text "Login"
     let eEnter = keypress Enter inputPwd
         eLoginData = ffor (zipDyn userName password) $ \case
           (Just u, Just p) -> Right $ LoginData u p
           _                -> Left "all fields are required"
-    response <- request $ postAuthenticate eLoginData $ leftmost [eSend, eEnter]
-    let success = mapMaybe reqSuccess response
-        loggedIn = catMaybes success
-    tellEvent $ ffor loggedIn $ \sd ->
-      EStateUpdate (\s -> s { stSession = SessionUser sd })
-    authData <- holdDyn (Left "not logged in yet") $ ffor loggedIn $ \SessionData{..} ->
-      Right (sdJwt, sdAliasName)
-    respAliases <- mapMaybe reqSuccess <$>
-      request (getAliasAll authData $ void loggedIn)
+    eRespAuth <- request $ postAuthenticate eLoginData $ leftmost [eSend, eEnter]
+    let eRespAuthSuccess = mapMaybe reqSuccess eRespAuth
+        eLoggedIn = catMaybes eRespAuthSuccess
+    updateState $ ffor eRespAuthSuccess $ \case
+      Just sd -> field @"stSession" .~ SessionUser sd
+      Nothing -> field @"stMsg"     .~ Just "wrong password"
+    updateState $ set (field @"stMsg") . Just <$> mapMaybe reqFailure eRespAuth
+    authData <- holdDyn (Left "not logged in yet") $ ffor eLoggedIn $
+      \SessionData{..} -> Right (sdJwt, sdAliasName)
+    respAliases <- request (getAliasAll authData $ void eLoggedIn)
+    updateState $ set (field @"stMsg") . Just <$> mapMaybe reqFailure respAliases
     -- TODO: store current route in route /register/ to allow going back
-    setRoute $ ffor respAliases $ \case
+    setRoute $ ffor (mapMaybe reqSuccess respAliases) $ \case
       [_] -> FrontendRoute_Main :/ ()
       _   -> FrontendRoute_AliasSelect :/ ()
 

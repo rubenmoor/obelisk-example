@@ -22,6 +22,7 @@ import           Control.Monad               (Monad ((>>=)), when)
 import           Control.Monad.Fix           (MonadFix)
 import           Control.Monad.Reader        (MonadReader, ReaderT (runReaderT),
                                               asks)
+import           Data.Generics.Product  (field)
 import qualified Data.Aeson                  as Aeson
 import           Data.Bool                   (Bool (False, True), bool, not)
 import           Data.Default                (Default (def))
@@ -48,7 +49,7 @@ import           PagesPodcast                (pagePodcastView)
 import           PagesUser                   (pageAliasRename, pageAliasSelect,
                                               pageLogin, pageRegister)
 import           Reflex.Dom                  (elDynClass', DomBuilder, EventName (Click),
-                                              EventWriter (tellEvent),
+                                              EventWriter,
                                               HasDomEvent (domEvent), MonadHold,
                                               PerformEvent (..), PostBuild,
                                               Prerender (prerender),
@@ -61,9 +62,10 @@ import           Reflex.Dom                  (elDynClass', DomBuilder, EventName
                                               widgetHold_, (=:))
 import           Route                       (FrontendRoute (..))
 import           Servant.Common.Req          (reqSuccess)
-import           Shared                      (btnSend, elLabelInput, iFa, iFa')
+import           Shared                      (updateState, btnSend, elLabelInput, iFa, iFa')
 import           State                       (EStateUpdate (..), Session (..),
                                               State (..))
+import Control.Lens.Setter ((.~))
 
 pageHome
   :: forall t (m :: * -> *)
@@ -137,7 +139,7 @@ navigation = do
           elAttr "span" ("class" =: "btnLogoutAlias") $ text sdAliasName
           text "Logout"
         let eLogout = domEvent Click elLogout
-        tellEvent $ eLogout $> EStateUpdate (\s -> s { stSession = SessionAnon })
+        updateState $ eLogout $> (field @"stSession" .~ SessionAnon)
         pure $ leftmost [eLogout, domEvent Click elSettings]
     eExit <- switchHold never eBtns
 
@@ -204,6 +206,9 @@ htmlBody = mdo
 
   (_, eStateUpdate) <- mapRoutedT (flip runReaderT dynState . runEventWriterT) $ do
     navigation
+    dyn_ $ ffor (stMsg <$> dynState) $ \case
+      Nothing -> pure ()
+      Just str -> divMsgOverlay $ el "span" $ text str
     subRoute_ $ \case
       FrontendRoute_Main        -> pageHome
       FrontendRoute_Register    -> pageRegister
@@ -318,3 +323,17 @@ frontend = Frontend
   { _frontend_head = htmlHead
   , _frontend_body = htmlBody
   }
+
+divMsgOverlay
+  :: forall t (m :: * -> *) a.
+  ( DomBuilder t m
+  , EventWriter t EStateUpdate m
+  ) => m a -> m a
+divMsgOverlay inner =
+  let spanClose = elAttr' "span" ("style" =: "float:right") $ iFa "fas fa-times"
+      cls = "class" =: "msgOverlay"
+  in  elAttr "div" cls $ do
+    (elClose, _) <- spanClose
+    let eClose = domEvent Click elClose
+    updateState $ eClose $> (field @"stMsg" .~ Nothing)
+    inner
