@@ -7,6 +7,16 @@ let password-repo = pkgs.fetchFromGitHub {
       rev = "6b243c282ca3d5fed50fbabe0f25bf152ad8f8cf";
       sha256 = "1qkhyd3x67dgag2xz32sd94n3zyhr1r2n0j8p2rlva74ar8qdgln";
     };
+    persistent-repo = pkgs.fetchFromGitHub {
+        owner = "yesodweb";
+        repo = "persistent";
+        # 2.13
+        # rev = "48a866a420de2e9274c3af626f7c835b4d89f8f3";
+        # sha256 = "0f47ax1zz225ixyb51dyg274vw8jqjjh2d4cjj8pckvkpj7k5p82";
+        # master
+        rev = "62596ba28dc3c9a069fa8677e597e4390333379c";
+        sha256 = "12mfk0y7q5cgdxldiqq4fkf7cdcmk4clsl8x1kg1nn3cri0nspxx";
+    };
     reflex-dom-framework = pkgs.fetchFromGitHub {
       owner = "reflex-frp";
       repo = "reflex-dom";
@@ -59,7 +69,22 @@ in
       #   rev = "60216c2fe435f157de4e253df0d318ecc1dfdaab";
       #   sha256 = "08i8462pp76p1kkrpa1968ky7y9jbxz4073qmx9l8r83wqwwjxkk";
       # }) {};
-      persistent = self.callHackage "persistent" "2.9.2" {};
+      #persistent = self.callHackage "persistent" "2.9.2" {};
+      lift-type = self.callCabal2nix "lift-type" (pkgs.fetchFromGitHub {
+        owner = "parsonsmatt";
+        repo = "lift-type";
+        rev = "f110c4c5c4afd600032c4df94084c9eb956a6d3f";
+        sha256 = "14qxjdj79p2izbl3yhas3i57mvharixpqsnr4lbisxxif9hljpy8";
+      }) {};
+      persistent = self.callCabal2nix "persistent" (persistent-repo + /persistent) {};
+      persistent-mysql = dontCheck (self.callCabal2nix "persistent-mysql" (persistent-repo + /persistent-mysql) {});
+      persistent-template = dontCheck (self.callCabal2nix "persistent-template" (persistent-repo + /persistent-template) {});
+      esqueleto = dontCheck (self.callCabal2nix "esqueleto" (pkgs.fetchFromGitHub {
+        owner = "bitemyapp";
+        repo = "esqueleto";
+        rev = "34047e1f5f7c06c0aa09f1c3069dffc9b4faffff";
+        sha256 = "1jkjqnyy02b0i0vpa07w59p6hdz805b643xzs02fvb66xcgnm2r4";
+      }) {});
       reflex-dom = self.callCabal2nix "reflex-dom" (reflex-dom-framework + /reflex-dom) {};
       reflex-dom-core = dontCheck (
         self.callCabal2nix "reflex-dom-core" (
@@ -84,6 +109,5 @@ in
       base64 = self.callHackage "base64" "0.3.1.1" {};
       password-instances = self.callCabal2nix "password-instances"
         (password-repo + /password-instances) {};
-      clay = self.callHackage "clay" "0.13.3" {};
     };
   })

@@ -12,6 +12,7 @@
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies               #-}
 
 module DbAdapter where
@@ -21,12 +22,12 @@ import           Data.Function           (on)
 import           Data.Password.Argon2    (Argon2, PasswordHash)
 import           Data.Password.Instances ()
 import           Data.Text               (Text)
-import           Database.Persist.TH     (mkMigrate, mkPersist,
+import           Database.Persist.TH     (mkEntityDefList, mkPersist,
                                           persistLowerCase, share, sqlSettings)
 import DbAdapter.Instances ()
 import qualified Model
 
-share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
+share [mkPersist sqlSettings, mkEntityDefList "entities"] [persistLowerCase|
 Podcast
   identifier       Text
   UPodcastIdentifier identifier
@@ -34,6 +35,8 @@ Podcast
 Platform
   blob             ByteString
   fkPodcast        PodcastId
+  -- optional explicit foreign key constraint
+  Foreign Podcast fkcPodcast fkPodcast
 Episode
   slug             Text
   blob             ByteString

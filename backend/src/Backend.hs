@@ -16,8 +16,7 @@ import           Route                           (BackendRoute (..),
 
 import           AppData                         (EnvApplication (..))
 import           Auth                            (UserInfo)
-import           Common                          (RouteShow,
-                                                  RoutesApi)
+import           Common                          (RouteShow, RoutesApi)
 import           Config                          (Params (..))
 import           Control.Applicative             (Applicative (pure))
 import           Control.Monad.Logger            (NoLoggingT (..))
@@ -37,13 +36,14 @@ import           Database.Persist.MySQL          (ConnectInfo (..),
                                                   defaultConnectInfo,
                                                   runMigration, runSqlPool,
                                                   withMySQLPool)
-import           DbAdapter                       (migrateAll)
+import           Database.Persist.TH             (migrateModels)
+import           DbAdapter                       (entities)
 import           Handlers                        (handleFeedXML, handlers,
                                                   mkContext)
 import           Obelisk.Backend                 (Backend (..))
-import           Obelisk.Configs                 (getTextConfig, ConfigsT,
+import           Obelisk.Configs                 (ConfigsT,
                                                   HasConfigs (getConfig),
-                                                  runConfigsT)
+                                                  getTextConfig, runConfigsT)
 import           Obelisk.ExecutableConfig.Lookup (getConfigs)
 import           Obelisk.Route                   (pattern (:/))
 import           Servant                         (serveDirectory)
@@ -79,7 +79,7 @@ backend = Backend
           }
     runNoLoggingT $ withMySQLPool connectInfo 10 $ \pool -> do
       -- TODO: why runResourceT and not liftIO?
-      runResourceT $ runSqlPool (runMigration migrateAll) pool
+      runResourceT $ runSqlPool (runMigration $ migrateModels entities) pool
       let env = EnvApplication
             { envPool      = pool
             , envMediaDir  = paramMediaDir
