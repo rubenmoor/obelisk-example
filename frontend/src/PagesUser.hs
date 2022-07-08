@@ -41,16 +41,15 @@ import           Data.Witherable        (Filterable (catMaybes, mapMaybe),
                                          filter)
 import           Obelisk.Route          (pattern (:/), R)
 import           Obelisk.Route.Frontend (RouteToUrl, SetRoute (..), routeLink)
-import           Reflex.Dom             (DomBuilder (inputElement),
+import           Reflex.Dom             (DomBuilder,
                                          EventName (Click),
                                          EventWriter,
                                          HasDomEvent (domEvent),
                                          InputElement (..), Key (Enter),
                                          MonadHold (holdDyn),
                                          PostBuild (getPostBuild),
-                                         Prerender (prerender),
-                                         Reflex (Dynamic, never, updated),
-                                         XhrResponse (..), blank, constDyn, def,
+                                         Prerender,
+                                         Reflex (Dynamic, never, updated), constDyn, def,
                                          dyn, dyn_, el, elAttr, elAttr',
                                          elementConfig_modifyAttributes, ffor,
                                          inputElementConfig_elementConfig,
@@ -58,18 +57,18 @@ import           Reflex.Dom             (DomBuilder (inputElement),
                                          keypress, leftmost, switchHold, text,
                                          widgetHold_, zipDyn, (=:))
 import           Route                  (FrontendRoute (..))
-import           Servant.Common.Req     (ReqResult (..), reqSuccess)
+import           Servant.Common.Req     (reqSuccess)
 import           Shared                 (btnSend, checkbox, elLabelInput,
                                          elLabelPasswordInput, iFa, reqFailure, updateState)
 import           State                  (EStateUpdate (..), Session (..),
                                          State (..))
 
 divOverlay
-  :: forall t js (m :: * -> *) a.
+  :: forall t (m :: * -> *) a.
   ( DomBuilder t m
   , SetRoute t (R FrontendRoute) m
   , RouteToUrl (R FrontendRoute) m
-  , Prerender js t m
+  , Prerender t m
   ) => m a -> m a
 divOverlay inner =
   let cls = "class" =: "mkOverlay"
@@ -80,11 +79,11 @@ divOverlay inner =
 
 -- TODO: bug: on reload on this page, stack overflow
 pageRegister
-  :: forall t js (m :: * -> *).
+  :: forall t (m :: * -> *).
   ( DomBuilder t m
   , SetRoute t (R FrontendRoute) m
   , RouteToUrl (R FrontendRoute) m
-  , Prerender js t m
+  , Prerender t m
   , MonadHold t m
   , MonadFix m
   , EventWriter t EStateUpdate m
@@ -123,11 +122,11 @@ pageRegister =
 
 -- TODO: bug: 400 user not found is not caught
 pageLogin
-  :: forall t js (m :: * -> *).
+  :: forall t (m :: * -> *).
   ( DomBuilder t m
   , SetRoute t (R FrontendRoute) m
   , RouteToUrl (R FrontendRoute) m
-  , Prerender js t m
+  , Prerender t m
   , MonadHold t m
   , EventWriter t EStateUpdate m
   ) =>  m ()
@@ -157,12 +156,12 @@ pageLogin =
       _   -> FrontendRoute_AliasSelect :/ ()
 
 pageAliasSelect
-  :: forall js t (m :: * -> *).
+  :: forall t (m :: * -> *).
   ( DomBuilder t m
   , MonadFix m
   , MonadHold t m
   , PostBuild t m
-  , Prerender js t m
+  , Prerender t m
   , RouteToUrl (R FrontendRoute) m
   , SetRoute t (R FrontendRoute) m
   , MonadReader (Dynamic t State) m
@@ -193,10 +192,10 @@ pageAliasSelect = do
       setRoute $ leftmost es $> FrontendRoute_Main :/ ()
 
 pageAliasRename
-  :: forall js t (m :: * -> *).
+  :: forall t (m :: * -> *).
   ( DomBuilder t m
   , PostBuild t m
-  , Prerender js t m
+  , Prerender t m
   , RouteToUrl (R FrontendRoute) m
   , SetRoute t (R FrontendRoute) m
   , MonadReader (Dynamic t State) m

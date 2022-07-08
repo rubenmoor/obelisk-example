@@ -1,7 +1,7 @@
 {
-  "paramDbHost"     : "localhost",
-  "paramDbUser"     : "podcast",
-  "paramDbPassword" : "password",
-  "paramDbDatabase" : "podcast",
-  "paramMediaDir"   : "media"
+    "paramDbHost"     : "localhost",
+    "paramDbUser"     : "serendipity",
+    "paramDbPassword" : "9LHXqeq2mNi8ke9T",
+    "paramDbDatabase" : "serendipity",
+    "paramMediaDir"   : "media"
 }

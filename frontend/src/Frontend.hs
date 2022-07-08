@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE LambdaCase          #-}
@@ -74,11 +75,11 @@ pageHome
 pageHome = pure ()
 
 pageSettings
-  :: forall js t (m :: * -> *).
+  :: forall t (m :: * -> *).
   ( DomBuilder t m
   , MonadReader (Dynamic t State) m
   , PostBuild t m
-  , Prerender js t m
+  , Prerender t m
   ) => m ()
 pageSettings = do
   authData <- asks getAuthData
@@ -91,19 +92,20 @@ pageSettings = do
       eSend <- btnSend $ text "Send"
       let eStr = maybe (Left "Cannot be empty") Right <$> mStr
       response <- request (postPodcastNew authData eStr eSend)
-      let eSuccess = mapMaybe reqSuccess response
+      -- TODO
+      let evSuccess = mapMaybe reqSuccess response
       -- setRoute view podcast
       blank
   pure ()
 
 navigation
-  :: forall js t (m :: * -> *).
+  :: forall t (m :: * -> *).
   ( DomBuilder t m
   , EventWriter t EStateUpdate m
   , MonadFix m
   , MonadHold t m
   , PostBuild t m
-  , Prerender js t m
+  , Prerender t m
   , RouteToUrl (R FrontendRoute) m
   , SetRoute t (R FrontendRoute) m
   , MonadReader (Dynamic t State) m
@@ -177,8 +179,8 @@ navigation = do
     blank
 
 htmlBody
-  :: forall t js (m :: * -> *)
-  . (ObeliskWidget js t (R FrontendRoute) m)
+  :: forall t (m :: * -> *)
+  . (ObeliskWidget t (R FrontendRoute) m)
   => RoutedT t (R FrontendRoute) m ()
 htmlBody = mdo
 
@@ -282,8 +284,8 @@ htmlBody = mdo
 
 
 htmlHead
-  :: forall t js (m :: * -> *)
-  .  (ObeliskWidget js t (R FrontendRoute) m)
+  :: forall t (m :: * -> *)
+  .  (ObeliskWidget t (R FrontendRoute) m)
   => RoutedT t (R FrontendRoute) m ()
 htmlHead = do
   elAttr "meta" ( "content" =: "text/html;charset=utf-8"
@@ -297,7 +299,7 @@ htmlHead = do
                 ) blank
   elAttr "link" ( "rel" =: "icon"
                <> "type" =: "image/x-icon"
-               <> "href" =: static @"favicon.ico"
+               <> "href" =: $(static "favicon.ico")
                 ) blank
   elAttr "link" ( "rel" =: "preconnect"
                <> "href" =: "https://fonts.gstatic.com"
@@ -313,7 +315,7 @@ htmlHead = do
   -- web
   elAttr "script" ( "src" =: "https://kit.fontawesome.com/63887ea353.js" ) blank
   el "title" $ text "serendipity.works"
-  elAttr "link" ( "href" =: static @"styles.css"
+  elAttr "link" ( "href" =: $(static "styles.css")
                <> "rel" =: "stylesheet"
                 ) blank
   -- el "style" $ text $ Lazy.toStrict $ renderWith compact [] cssGeneral

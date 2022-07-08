@@ -37,7 +37,6 @@ library
     , password-instances
     , persistent
     , persistent-mysql
-    , persistent-template
     , resource-pool
     , resourcet
     , safe

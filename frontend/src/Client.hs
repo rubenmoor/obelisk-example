@@ -30,7 +30,7 @@ import           Servant.Reflex      (BaseUrl (..), ReqResult,
 import           State               (Session (..), State (stSession))
 
 request
-  :: (Prerender js t m, Monad m)
+  :: (Prerender t m, Monad m)
   => Client m (Event t (ReqResult () a))
   -> m (Event t (ReqResult () a))
 request r = switchDyn <$> prerender (pure never) r

@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE KindSignatures      #-}
@@ -16,7 +17,6 @@ module PagesPodcast
 import           Client                   (getPodcast, request)
 import           Common.Auth              (SessionData (..))
 import           Control.Monad            (forM_)
-import           Control.Monad.Fix        (MonadFix)
 import           Control.Monad.Reader     (MonadReader, asks)
 import           Data.Either              (Either (Right))
 import           Data.Function            (($))
@@ -38,34 +38,29 @@ import           Model                    (Episode (..), Platform (..),
                                            PlatformName (..), Podcast (..),
                                            Rank (..))
 import           Obelisk.Generated.Static (static)
-import           Obelisk.Route.Frontend   (R, RouteToUrl, Routed (askRoute),
-                                           SetRoute)
-import           Reflex.Dom               (DomBuilder, EventWriter, MonadHold,
+import           Obelisk.Route.Frontend   (Routed (askRoute))
+import           Reflex.Dom               (DomBuilder, MonadHold,
                                            PostBuild (getPostBuild), Prerender,
                                            Reflex (Dynamic), blank, dyn_, el,
                                            elAttr, elClass, ffor, text,
                                            widgetHold_, zipDyn, (=:))
-import           Route                    (FrontendRoute, PodcastIdentifier (unPodcastIdentifier))
+import           Route                    (PodcastIdentifier (unPodcastIdentifier))
 import           Servant.Reflex           (reqSuccess)
 import           Shared                   (iFa)
-import           State                    (EStateUpdate, Session (..),
+import           State                    (Session (..),
                                            State (..))
 import           Text.Printf              (printf)
 import           Text.Regex.TDFA          ((=~))
 import qualified Text.URI                 as URI
 
 pagePodcastView
-  :: forall t js (m :: * -> *).
+  :: forall t (m :: * -> *).
   ( DomBuilder t m
-  , EventWriter t EStateUpdate m
   , MonadHold t m
-  , MonadFix m
   , MonadReader (Dynamic t State) m
   , PostBuild t m
-  , Prerender js t m
+  , Prerender t m
   , Routed t PodcastIdentifier m
-  , RouteToUrl (R FrontendRoute) m
-  , SetRoute t (R FrontendRoute) m
   ) => m ()
 pagePodcastView = do
   dynPodcastId <- fmap unPodcastIdentifier <$> askRoute
@@ -87,10 +82,10 @@ pagePodcastView = do
       elAttr "div" ("class" =: "col-8") $ do
         forM_ platforms $ \Platform{..} -> do
           let imgSrc = case platformName of
-                PlatformSpotify  -> static @"spotify.png"
-                PlatformTelegram -> static @"telegram.png"
-                PlatformItunes   -> static @"itunes.png"
-                PlatformYoutube  -> static @"youtube.png"
+                PlatformSpotify  -> $(static "spotify.png")
+                PlatformTelegram -> $(static "telegram.png")
+                PlatformItunes   -> $(static "itunes.png")
+                PlatformYoutube  -> $(static "youtube.png")
           elAttr "a" ("href" =: URI.render platformLink) $
             elAttr "img" ("src" =: imgSrc) blank
       elAttr "div" ("class" =: "col-4") $ text podcastDescription
