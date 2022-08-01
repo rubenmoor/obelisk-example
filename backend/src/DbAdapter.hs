@@ -24,8 +24,10 @@ import           Data.Password.Instances ()
 import           Data.Text               (Text)
 import           Database.Persist.TH     (mkEntityDefList, mkPersist,
                                           persistLowerCase, share, sqlSettings)
+import Data.Time (UTCTime)
+
 import DbAdapter.Instances ()
-import qualified Model
+import qualified Common.Model as Model
 
 share [mkPersist sqlSettings, mkEntityDefList "entities"] [persistLowerCase|
 Podcast
@@ -41,17 +43,20 @@ Episode
   slug             Text
   blob             ByteString
   fkPodcast        PodcastId
-  fkEventSource    EventSourceId
 User                             -- some real person
   name             Text
   UUserName name
   isSiteAdmin      Bool
-  fkEventSource    EventSourceId
   fkDefaultAlias   AliasId Maybe
 Alias                            -- one of several identities
   name             Text
   fkUser           UserId
+  lastEdited       UTCTime
+  isVisible        Bool
   UAliasName name
+Visitor
+  ipAddress        Text
+  UIpAddress ipAddress
 Clearance
   fkAlias          AliasId
   fkPodcast        PodcastId
@@ -62,10 +67,10 @@ AuthPwd
   password         (PasswordHash Argon2)
   UAuthPwdFkUser fkUser
 Journal
+  created          UTCTime
   blob             ByteString
-  fkEventSource    EventSourceId
-  fkAlias          AliasId Maybe
-EventSource
+  fkVisitor        VisitorId
+  fkMAlias         AliasId Maybe
 |]
 
 instance Eq Podcast where

@@ -5,128 +5,313 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude     #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Auth
-  ( module Auth
-  , module Common.Auth
-  ) where
+    ( module Auth
+    , module Common.Auth
+    )
+where
 
-import           Common.Auth          (AuthProtect,
-                                       CompactJWT (CompactJWT),
-                                       SessionData (..))
-import           Control.Applicative  (Applicative (pure))
-import           Control.Category     (Category ((.)))
-import           Control.Lens         ((?~), (^.), (^?), _Just)
-import           Control.Monad.Except (MonadError, throwError)
-import           Control.Monad.Time   (MonadTime)
-import           Crypto.JWT           (Audience (..), ClaimsSet, JWK,
-                                       JWTError (..), MonadRandom,
-                                       NumericDate (..), StringOrURI,
-                                       bestJWSAlg, claimAud, claimExp, claimIat,
-                                       claimSub, decodeCompact,
-                                       defaultJWTValidationSettings,
-                                       emptyClaimsSet, encodeCompact,
-                                       newJWSHeader, signClaims, string,
-                                       verifyClaims)
-import           Data.Bool            (Bool (..))
-import qualified Data.ByteString.Lazy as BL
-import           Data.Eq              (Eq ((==)))
-import           Data.Function        (($), (&))
-import           Data.Map             (Map)
-import           Data.Maybe           (Maybe (..))
-import           Data.String          (fromString)
-import           Data.Text            (Text)
-import qualified Data.Text            as Text
-import qualified Data.Text.Encoding   as Text
-import           Data.Time            (UTCTime, addUTCTime)
-import           Database.Gerippe     (Key)
-import           DbAdapter            (Alias (..))
-import           GHC.Generics         (Generic)
-import           Model                (Rank)
-import Servant.Server (HasContextEntry(getContextEntry),  HasServer (..))
-import Snap.Core (Request, Snap)
-import Servant.API ((:>))
-import Data.Proxy (Proxy(Proxy))
-import Servant.Server.Internal (withRequest, addAuthCheck, DelayedM)
-import Control.Monad.IO.Class (MonadIO(liftIO))
-import Snap.Internal.Core (evalSnap)
-import GHC.Base (($!))
-import GHC.Exts (seq)
-import GHC.TypeLits (KnownSymbol)
+import qualified Data.ByteString.Lazy.UTF8 as LBSU
+import           Data.Pool                      ( Pool )
+import           Database.Persist.MySQL         ( SqlBackend
+                                                , Entity(..)
+                                                )
+import           Control.Applicative            ( Applicative(pure) )
+import           Control.Category               ((<<<),  Category((.)) )
+import           Control.Lens                   ( (?~)
+                                                , (^.)
+                                                , (^?)
+                                                , _Just
+                                                )
+import           Control.Monad                  ( (>>=) )
+import           Control.Monad.Except           (lift,  MonadError
+                                                , runExceptT
+                                                , throwError
+                                                )
+import           Crypto.JWT                     (verifyClaimsAt,  Audience(..)
+                                                , ClaimsSet
+                                                , JWK
+                                                , JWTError(..)
+                                                , MonadRandom
+                                                , NumericDate(..)
+                                                , StringOrURI
+                                                , bestJWSAlg
+                                                , claimAud
+                                                , claimExp
+                                                , claimIat
+                                                , claimSub
+                                                , decodeCompact
+                                                , defaultJWTValidationSettings
+                                                , emptyClaimsSet
+                                                , encodeCompact
+                                                , newJWSHeader
+                                                , signClaims
+                                                , string
+
+                                                )
+import           Data.Bool                      ( Bool(..) )
+import qualified Data.ByteString.Lazy          as BL
+import           Data.Either                    ( Either (..), either )
+import           Data.Eq                        ( Eq((==)) )
+import           Data.Function                  ( ($)
+                                                , (&)
+                                                )
+import           Data.Functor                   ((<$>)
+                                                , (<&>)
+                                                )
+import           Data.Maybe                     (Maybe(..)
+                                                , maybe
+                                                )
+import           Data.String                    ( fromString )
+import           Data.Text                      ( Text )
+import qualified Data.Text                     as Text
+import           Data.Semigroup                 ( (<>) )
+import qualified Data.Text.Encoding            as Text
+import           Data.Time                      (getCurrentTime,  UTCTime
+                                                , addUTCTime
+                                                )
+import           Text.Show                      ( show )
+import           Database.Gerippe               ( Key
+                                                , InnerJoin(..)
+                                                , getWhere
+                                                , select
+                                                , from
+                                                , on
+                                                , (==.)
+                                                , where_
+                                                , val
+                                                , (&&.)
+                                                , joinMTo1Where'
+                                                )
+import qualified Database.Gerippe
+import           GHC.Generics                   ( Generic )
+import           Servant.Server                 ( HasContextEntry
+                                                    ( getContextEntry
+                                                    )
+                                                , HasServer(..)
+                                                , Context((:.), EmptyContext)
+                                                , ServantErr(..)
+                                                , err500
+                                                )
+import qualified Servant.Server                as Servant
+import           Snap.Core                      ( Snap
+                                                , getHeader
+                                                , getRequest
+                                                )
+import           Servant.API                    ( (:>)
+                                                , parseHeader
+                                                )
+import           Data.Proxy                     ( Proxy(Proxy) )
+import           Servant.Server.Internal        (delayedFailFatal,  withRequest
+                                                , addAuthCheck
+                                                , DelayedM
+                                                )
+import           Control.Monad.IO.Class         ( MonadIO(liftIO) )
+import           Snap.Internal.Core             ( evalSnap )
+import           GHC.Base                       (($!) )
+import           GHC.Exts                       ( seq )
+import           GHC.TypeLits                   ( KnownSymbol )
+
+import           AppData                        ( Handler )
+import           Common.Auth                    (AuthOptional, AuthError (..),  AuthRequired
+                                                , CompactJWT(CompactJWT)
+                                                , SessionData(..)
+                                                )
+import           Common.Model                   ( Rank )
+import           Database                       ( runDb
+                                                , runDb'
+                                                )
+import qualified          DbAdapter                      as Db
+import Snap.Core (MonadSnap)
+import GHC.Num (Num((*)))
+import Data.Either.Combinators (mapLeft)
+import Control.Monad.Trans.Except (except)
+import Servant.Server (err401)
+import Control.Monad ((=<<))
+import Data.Function (const)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 
 audience :: StringOrURI
-audience = "https://www.serendipity.works"
+audience = "https://palantype.com"
 
 mkClaims :: UTCTime -> Text -> ClaimsSet
-mkClaims now sub = emptyClaimsSet
-  & claimAud ?~ Audience [audience]
-  & claimExp ?~ NumericDate (addUTCTime 30 now)
-  & claimIat ?~ NumericDate now
-  & claimSub ?~ fromString (Text.unpack sub)
+mkClaims now sub =
+    emptyClaimsSet
+        &  claimAud ?~ Audience [audience]
+        &  claimExp ?~ NumericDate (addUTCTime (30 * 24 * 60 * 60) now)
+        &  claimIat ?~ NumericDate now
+        &  claimSub ?~ fromString (Text.unpack sub)
 
 mkCompactJWT
-  :: (MonadRandom m, MonadError JWTError m)
-  => JWK
-  -> ClaimsSet
-  -> m CompactJWT
+    :: (MonadRandom m, MonadError JWTError m)
+    => JWK
+    -> ClaimsSet
+    -> m CompactJWT
 mkCompactJWT jwk claims = do
-  alg <- bestJWSAlg jwk
-  signed <- signClaims jwk (newJWSHeader ((), alg)) claims
-  pure $ CompactJWT $ Text.decodeUtf8 $ BL.toStrict $ encodeCompact signed
+    alg    <- bestJWSAlg jwk
+    signed <- signClaims jwk (newJWSHeader ((), alg)) claims
+    pure $ CompactJWT $ Text.decodeUtf8 $ BL.toStrict $ encodeCompact signed
 
 verifyCompactJWT
-  :: (MonadError JWTError m, MonadTime m)
-  => JWK
-  -> CompactJWT
-  -> m Text
-verifyCompactJWT jwk (CompactJWT str)  = do
-  jwt <- decodeCompact $ BL.fromStrict $ Text.encodeUtf8 str
-  let config = defaultJWTValidationSettings (== audience)
-  claims <- verifyClaims config jwk jwt
-  case claims ^. claimSub ^? _Just . string of
-    Nothing -> throwError $ JWTClaimsSetDecodeError "no subject in claims"
-    Just s  -> pure s
+    -- :: forall m. (MonadSnap m, MonadError JWTError m) => JWK -> CompactJWT -> UTCTime -> m Text
+    :: forall m. MonadError JWTError m => JWK -> CompactJWT -> UTCTime -> m Text
+verifyCompactJWT jwk (CompactJWT str) now = do
+    jwt <- decodeCompact $ BL.fromStrict $ Text.encodeUtf8 str
+    let config = defaultJWTValidationSettings (== audience)
+    claims <- verifyClaimsAt config jwk now jwt
+    case claims ^. claimSub ^? _Just . string of
+            Nothing -> throwError $ JWTClaimsSetDecodeError "no subject in claims"
+            Just sub -> pure sub
 
 data UserInfo = UserInfo
   { uiIsSiteAdmin :: Bool
   , uiUserName    :: Text
-  , uiAlias       :: Alias
-  , uiKeyAlias    :: Key Alias
+  , uiAlias       :: Db.Alias
+  , uiKeyAlias    :: Key Db.Alias
   , uiClearances  :: Map Text Rank
   } deriving (Generic)
 
-mkSessionData :: CompactJWT -> UserInfo -> SessionData
-mkSessionData jwt UserInfo{..} =
-  let sdJwt = jwt
-      sdIsSiteAdmin = uiIsSiteAdmin
-      sdUserName = uiUserName
-      sdAliasName = aliasName uiAlias
-      sdClearances = uiClearances
-  in  SessionData{..}
+-- mkSessionData :: CompactJWT -> UserInfo -> SessionData
+-- mkSessionData jwt UserInfo {..} =
+--     let sdJwt         = jwt
+--         sdIsSiteAdmin = uiIsSiteAdmin
+--         sdUserName    = uiUserName
+--         sdAliasName   = Db.aliasName uiAlias
+--         sdClearances  = uiClearances
+--     in  SessionData { .. }
+
+type ContextAuth = Snap (Either AuthError UserInfo)
 
 instance ( KnownSymbol tag
          , HasServer api context m
-         , HasContextEntry context (Snap UserInfo)
+         , HasContextEntry context (Snap (Either AuthError UserInfo))
          )
-  => HasServer (AuthProtect tag :> api) context m where
+  => HasServer (AuthRequired tag :> api) context m where
+    type ServerT (AuthRequired tag :> api) context m
+        = UserInfo -> ServerT api context m
 
-  type ServerT (AuthProtect tag :> api) context m =
-    UserInfo -> ServerT api context m
+    hoistServerWithContext _ pc nt s =
+        hoistServerWithContext (Proxy :: Proxy api) pc nt . s
 
-  hoistServerWithContext _ pc nt s = hoistServerWithContext (Proxy :: Proxy api) pc nt . s
-
-  route (Proxy :: Proxy (AuthProtect tag :> api)) context subserver =
-    route (Proxy :: Proxy api) context (subserver `addAuthCheck` withRequest authCheck)
+    route (Proxy :: Proxy (AuthRequired tag :> api)) context subserver = route
+        (Proxy :: Proxy api)
+        context
+        (addAuthCheck subserver $ authRequire =<< authCheck (getContextEntry context))
       where
-        authCheck :: Request -> DelayedM m UserInfo
-        authCheck =
-          liftIO . evalSnap (getContextEntry context)
-                            (\x -> pure $! (x `seq` ()))
-                            (\f -> let !_ = f 0 in pure ())
+        authRequire = either
+          (\err -> delayedFailFatal $ err401
+            { errHeaders = [("WWW-Authenticate", "Bearer")]
+            , errBody = LBSU.fromString $ show err
+            }
+          )
+          pure
+
+authCheck :: MonadIO m => ContextAuth -> DelayedM m (Either AuthError UserInfo)
+authCheck a = withRequest $ liftIO <<< evalSnap
+    a
+    (\x -> pure $! (x `seq` ()))
+    (\f -> let !_ = f 0 in pure ())
+
+instance ( KnownSymbol tag
+         , HasServer api context m
+         , HasContextEntry context (Snap (Either AuthError UserInfo))
+         )
+  => HasServer (AuthOptional tag :> api) context m where
+    type ServerT (AuthOptional tag :> api) context m
+        = Maybe UserInfo -> ServerT api context m
+
+    hoistServerWithContext _ pc nt s =
+        hoistServerWithContext (Proxy :: Proxy api) pc nt . s
+
+    route (Proxy :: Proxy (AuthOptional tag :> api)) context subserver = route
+        (Proxy :: Proxy api)
+        context
+        (addAuthCheck subserver $ authOptional <$> authCheck (getContextEntry context))
+       where
+         authOptional = either (const Nothing) Just
+
+
+-- getClearances :: Key Db.Alias -> Handler Rank
+-- getClearances keyAlias = do
+--     Db.Clearance {..} <- runDb (getWhere Db.ClearanceFkAlias keyAlias) >>= \case
+--         [Entity _ v] -> pure v
+--         []           -> Servant.throwError $
+--             err500 { errBody = "getClearances: empty list" }
+--         _            -> Servant.throwError $
+--             err500 { errBody = "getClearances: expected single entry" }
+--     pure clearanceRank
+
+getClearances :: Key Db.Alias -> Handler (Map Text Rank)
+getClearances keyAlias = do
+  clearances <- runDb $
+    joinMTo1Where' Db.ClearanceFkPodcast Db.PodcastId
+                   Db.ClearanceFkAlias keyAlias
+  pure $ Map.fromList $ clearances <&> \(Entity _ Db.Clearance{..}, Entity _ Db.Podcast{..}) ->
+      (podcastIdentifier, clearanceRank)
+
+mkContext :: JWK -> Pool SqlBackend -> Context '[Snap (Either AuthError UserInfo)]
+mkContext jwk pool =
+    let
+        authHandler :: MonadSnap m => m (Either AuthError UserInfo)
+        authHandler = runExceptT do
+            auth <- lift (getHeader "Authorization" <$> getRequest) >>=
+              maybe (throwError $ AuthErrorOther "authorization header missing")
+                    pure
+            aliasBs <- lift (getHeader "X-Alias" <$> getRequest) >>=
+              maybe (throwError $ AuthErrorOther "X-Alias header missing")
+                    pure
+            uiAliasName <-
+              except $ mapLeft (AuthErrorOther <<< ("parseHeader alias: " <>)) $
+                parseHeader aliasBs
+            jwt <-
+              either (throwError <<< AuthErrorOther <<< ("parseHeader jwt: " <>))
+                     pure
+                     (parseHeader auth)
+
+            now <- liftIO $ getCurrentTime
+            eSub <- runExceptT $ verifyCompactJWT jwk jwt now
+            uiUserName <-
+              either
+                (\case
+                    JWTExpired -> throwError AuthErrorExpired
+                    e          -> throwError $ AuthErrorOther $ Text.pack $ show e
+                    )
+                pure
+                eSub
+            eLs <- lift $ runDb' pool $ select $ from $ \(a `InnerJoin` u) -> do
+                on $ a Database.Gerippe.^. Db.AliasFkUser ==. u Database.Gerippe.^. Db.UserId
+                where_ $ u Database.Gerippe.^. Db.UserName ==. val uiUserName
+                  &&. a Database.Gerippe.^. Db.AliasName   ==. val uiAliasName
+                pure (u, a)
+            (Entity _ Db.User {..}, Entity uiKeyAlias uiAlias) <- case eLs of
+                Right [entry] -> pure entry
+                Left strErr   -> throwError $ AuthErrorOther $ "database error: " <> Text.pack strErr
+                _             -> throwError $ AuthErrorOther $ "user not found: " <> uiUserName
+            let uiIsSiteAdmin = userIsSiteAdmin
+
+            eClearances <- lift $ runDb' pool $
+              joinMTo1Where' Db.ClearanceFkPodcast
+                             Db.PodcastId
+                             Db.ClearanceFkAlias
+                             uiKeyAlias
+            clearances <- case eClearances of
+                  Left strErr -> throwError $ AuthErrorOther $ "database error: " <> Text.pack strErr
+                  Right ls -> pure ls
+
+            let
+                uiClearances = Map.fromList $ clearances <&> \(Entity _ c, Entity _ p) ->
+                  (Db.podcastIdentifier p, Db.clearanceRank c)
+            pure $ UserInfo { .. }
+    in
+        authHandler :. EmptyContext

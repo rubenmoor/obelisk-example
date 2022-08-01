@@ -56,7 +56,7 @@ import           Reflex.Dom             (DomBuilder,
                                          inputElementConfig_initialValue,
                                          keypress, leftmost, switchHold, text,
                                          widgetHold_, zipDyn, (=:))
-import           Route                  (FrontendRoute (..))
+import           Common.Route                  (FrontendRoute (..))
 import           Servant.Common.Req     (reqSuccess)
 import           Shared                 (btnSend, checkbox, elLabelInput,
                                          elLabelPasswordInput, iFa, reqFailure, updateState)
@@ -112,7 +112,7 @@ pageRegister =
     dynExists <- holdDyn False eUserExists
     let eUserNew = ffor (zipDyn dynExists $ zipDyn userName password) $ \case
           (True, _)             -> Left "username already exists"
-          (_, (Just u, Just p)) -> Right $ UserNew u p
+          (_, (Just u, Just p)) -> Right $ UserNew u p Nothing True
           _                     -> Left "all fields are required"
     eResponse <- request $ postAuthNew eUserNew eSend
     updateState $ set (field @"stSession") . SessionUser <$> mapMaybe reqSuccess eResponse

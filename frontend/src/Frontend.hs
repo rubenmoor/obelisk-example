@@ -61,7 +61,7 @@ import           Reflex.Dom                  (elDynClass', DomBuilder, EventName
                                               prerender_, runEventWriterT,
                                               switchHold, tailE, text,
                                               widgetHold_, (=:))
-import           Route                       (FrontendRoute (..))
+import           Common.Route                       (FrontendRoute (..))
 import           Servant.Common.Req          (reqSuccess)
 import           Shared                      (updateState, btnSend, elLabelInput, iFa, iFa')
 import           State                       (EStateUpdate (..), Session (..),
@@ -120,7 +120,7 @@ navigation = do
   dynSession <- asks $ fmap stSession
   divNavBar $ mdo
     let navButtonCls = ffor displayNav $ \cls -> unwords
-          [ "col-2"
+          [ "col-1"
           , "onMobileHeight80"
           , "onDesktopDisplayImportant"
           , "navButton"
@@ -146,7 +146,7 @@ navigation = do
     eExit <- switchHold never eBtns
 
     let spanNavBtnHome = fmap fst . elAttr' "span"
-          ("class" =: unwords [ "col-2"
+          ("class" =: unwords [ "col-1"
                               , "onMobileWidthAuto"
                               , "onDesktopBorder"
                               , "navBtnHome"

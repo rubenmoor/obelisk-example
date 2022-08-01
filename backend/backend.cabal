@@ -44,17 +44,25 @@ library
     , servant
     , snap-core
     , text
+    , text-show
     , time
+    , transformers
     , utf8-string
   exposed-modules:
     Backend
   other-modules:
-      AppData
-    , Auth
-    , Config
-    , Handlers
-    , DbAdapter
-    , DbAdapter.Instances
+       AppData
+     , Auth
+     , Config
+     , Database
+     , DbJournal
+     , Handler
+     , Handler.Auth
+     , Handler.Feed
+     , Handler.User
+     , Handler.Serendipity
+     , DbAdapter
+     , DbAdapter.Instances
   ghc-options: -Wall -Wredundant-constraints -Wincomplete-uni-patterns -Wincomplete-record-updates -O -fno-show-valid-hole-fits
 
 executable backend

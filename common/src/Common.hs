@@ -8,94 +8,14 @@
 
 module Common where
 
-import           Common.Auth              (AuthProtect, LoginData, SessionData,
-                                           UserNew)
-import           Control.Applicative      (Applicative (pure))
-import           Control.Category         (Category (id))
-import           Data.Aeson               (FromJSON, ToJSON)
-import           Data.Bool                (Bool)
-import qualified Data.ByteString.Lazy     as Lazy
 import           Data.Foldable            (Foldable (foldl'))
 import           Data.Function            (($))
 import           Data.Int                 (Int)
-import           Data.Maybe               (Maybe)
 import           Data.Text                (Text, replace)
 import qualified Data.Text                as Text
-import           GHC.Generics             (Generic)
 import           GHC.Num                  (Num ((*)))
 import           GHC.Real                 (Integral (div, mod))
-import           Model                    (Episode, Platform, Podcast)
-import           Network.HTTP.Media       ((//), (/:))
-import           Servant.API              ((:<|>) (..), (:>), Get, JSON, Post,
-                                           Raw, ReqBody)
-import           Servant.API.Capture      (Capture)
-import           Servant.API.ContentTypes (Accept (..), MimeRender (..),
-                                           MimeUnrender (..))
 import           Text.Printf              (printf)
-
-type RouteShow = "show" :> Capture "podcast_id" Text :>
-  ( "feed.xml" :> Get '[XML] Lazy.ByteString
-  )
-
-type RouteMedia = "media" :> Raw
-
-type RoutesApi = "api" :>
-  (     "auth" :>
-    (      RouteGrantAuthPwd
-      :<|> RouteUserNew
-      :<|> RouteDoesUserExist
-    )
-   :<|> "epsiode" :> Capture "podcast_id" Text :>
-    (      AuthProtect "jwt" :> RouteEpisodeNew
-    )
-   :<|> "podcast" :>
-    (
-           AuthProtect "jwt" :> RoutePodcastNew
-      :<|> RoutePodcastGet
-    )
-   :<|> "alias" :>
-    (      AuthProtect "jwt" :> RouteAliasRename
-      :<|> AuthProtect "jwt" :> RouteAliasGetAll
-      :<|> AuthProtect "jwt" :> RouteAliasSetDefault
-    )
-  )
-
-type RouteGrantAuthPwd  = "login"  :> ReqBody '[JSON] LoginData :> Post '[JSON] (Maybe SessionData)
-type RouteUserNew       = "new"    :> ReqBody '[JSON] UserNew   :> Post '[JSON] SessionData
-type RouteDoesUserExist = "exists" :> ReqBody '[JSON] Text      :> Post '[JSON] Bool
-
-type RouteAliasRename     = "rename"       :> ReqBody '[JSON] Text :> Post '[JSON] ()
-type RouteAliasGetAll     = "get" :> "all" :> Get '[JSON] [Text]
-type RouteAliasSetDefault = "setDefault"   :> ReqBody '[JSON] Text :> Post '[JSON] ()
-
--- episode
-
-type RouteEpisodeNew = "new" :> ReqBody '[JSON] EpisodeNew :> Post '[JSON] ()
-
-data EpisodeNew = EpisodeNew
-  { newCustomIndex :: Text
-  , newTitle       :: Text
-  , newDate        :: Text
-  } deriving (Generic)
-
-instance FromJSON EpisodeNew
-instance ToJSON EpisodeNew
-
--- podcast
-
-type RoutePodcastNew = "new" :> ReqBody '[JSON] Text :> Post '[JSON] ()
-type RoutePodcastGet = Capture "podcast_id" Text :> Get '[JSON] (Podcast, [Platform], [Episode])
-
-data XML
-
-instance Accept XML where
-  contentType _ = "application" // "xml" /: ("charset", "utf-8")
-
-instance MimeRender XML Lazy.ByteString where
-  mimeRender _ = id
-
-instance MimeUnrender XML Lazy.ByteString where
-  mimeUnrender _ bs = pure bs
 
 convertToFilename :: Text -> Text
 convertToFilename str =

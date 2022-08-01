@@ -10,13 +10,13 @@
 
 module Backend where
 
-import           Route                           (BackendRoute (..),
+import           Common.Route                           (BackendRoute (..),
                                                   FrontendRoute,
                                                   fullRouteEncoder)
 
 import           AppData                         (EnvApplication (..))
-import           Auth                            (UserInfo)
-import           Common                          (RouteShow, RoutesApi)
+import           Auth                            (UserInfo, mkContext, AuthError)
+import           Common.Api                      (RouteShow, RoutesApi)
 import           Config                          (Params (..))
 import           Control.Applicative             (Applicative (pure))
 import           Control.Monad.Logger            (NoLoggingT (..))
@@ -38,8 +38,7 @@ import           Database.Persist.MySQL          (ConnectInfo (..),
                                                   withMySQLPool)
 import           Database.Persist.TH             (migrateModels)
 import           DbAdapter                       (entities)
-import           Handlers                        (handleFeedXML, handlers,
-                                                  mkContext)
+import           Handler                         (handleFeedXML, handlers)
 import           Obelisk.Backend                 (Backend (..))
 import           Obelisk.Configs                 (ConfigsT,
                                                   HasConfigs (getConfig),
@@ -53,8 +52,9 @@ import           Snap.Core                       (Snap)
 import           System.Exit                     (ExitCode (ExitFailure),
                                                   exitWith)
 import           System.IO                       (IO)
+import Data.Either (Either)
 
-serveApi :: Context '[Snap UserInfo] -> EnvApplication -> Snap ()
+serveApi :: Context '[Snap (Either AuthError UserInfo)] -> EnvApplication -> Snap ()
 serveApi ctx = runReaderT $ serveSnapWithContext (Proxy :: Proxy RoutesApi) ctx handlers
 
 serveFeed :: EnvApplication -> Snap ()

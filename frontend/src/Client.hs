@@ -8,7 +8,7 @@
 
 module Client where
 
-import           Common              (EpisodeNew, RoutesApi)
+import           Common.Api          (EpisodeNew, RoutesApi)
 import           Common.Auth         (CompactJWT, LoginData (..),
                                       SessionData (..), UserNew (..))
 import           Control.Applicative (Applicative (pure), (<$>))
@@ -20,7 +20,7 @@ import           Data.Function       (($))
 import Data.Functor (Functor)
 import           Data.Maybe          (Maybe)
 import           Data.Text           (Text)
-import           Model               (Episode, Platform, Podcast)
+import           Common.Model               (Episode, Platform, Podcast)
 import           Reflex.Dom          (Prerender (Client, prerender),
                                       Reflex (Dynamic, Event, never), constDyn,
                                       ffor, switchDyn)
@@ -62,12 +62,24 @@ postDoesUserExist
   -> Event t ()
   -> m (Event t (ReqResult () Bool))
 
+postDoesAliasExist
+  :: SupportsServantReflex t m
+  => Dynamic t (Either Text Text)
+  -> Event t ()
+  -> m (Event t (ReqResult () Bool))
+
+postLogout
+  :: SupportsServantReflex t m
+  => Dynamic t (Either Text (CompactJWT, Text))
+  -> Event t ()
+  -> m (Event t (ReqResult () ()))
+
 -- episode
 
 postEpisodeNew
   :: SupportsServantReflex t m
-  => Dynamic t (Either Text Text) -- podcast identifier
-  -> Dynamic t (Either Text (CompactJWT, Text))
+  => Dynamic t (Either Text (CompactJWT, Text))
+  -> Dynamic t (Either Text Text) -- podcast identifier
   -> Dynamic t (Either Text EpisodeNew)
   -> Event t ()
   -> m (Event t (ReqResult () ()))
@@ -94,7 +106,7 @@ postAliasRename
   => Dynamic t (Either Text (CompactJWT, Text))
   -> Dynamic t (Either Text Text)
   -> Event t ()
-  -> m (Event t (ReqResult () ()))
+  -> m (Event t (ReqResult () Text))
 
 getAliasAll
   :: SupportsServantReflex t m
@@ -109,18 +121,28 @@ postAliasSetDefault
   -> Event t ()
   -> m (Event t (ReqResult () ()))
 
+postAliasVisibility
+  :: SupportsServantReflex t m
+  => Dynamic t (Either Text (CompactJWT, Text))
+  -> Dynamic t (Either Text Bool)
+  -> Event t ()
+  -> m (Event t (ReqResult () ()))
+
 (
        (    postAuthenticate
        :<|> postAuthNew
        :<|> postDoesUserExist
+       :<|> postDoesAliasExist
+       :<|> postLogout
        )
-  :<|> (postEpisodeNew)
-  :<|> (    postPodcastNew
+  :<|> (    postEpisodeNew
+       :<|> postPodcastNew
        :<|> getPodcast
        )
   :<|> (    postAliasRename
        :<|> getAliasAll
        :<|> postAliasSetDefault
+       :<|> postAliasVisibility
        )
   ) =
   client (Proxy :: Proxy RoutesApi)

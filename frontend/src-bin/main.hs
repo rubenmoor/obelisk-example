@@ -2,7 +2,7 @@ import           Frontend               (frontend)
 import           Obelisk.Frontend       (runFrontend)
 import           Obelisk.Route.Frontend (checkEncoder)
 import           Reflex.Dom             (run)
-import           Route                  (fullRouteEncoder)
+import           Common.Route           (fullRouteEncoder)
 
 main :: IO ()
 main = do

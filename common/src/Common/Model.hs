@@ -1,8 +1,8 @@
 {-# LANGUAGE DeriveGeneric         #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Model
-  ( module Model
+module Common.Model
+  ( module Common.Model
   ) where
 
 import           Data.Aeson              (FromJSON (..), ToJSON (..),
@@ -93,36 +93,43 @@ instance ToJSON Rank
 -- Journal
 
 data Journal = Journal
-  { journalCreated     :: UTCTime
-  , journalSubject     :: Subject
-  , journalEvent       :: Event
-  , journalDescription :: Text
+  { journalEvent :: JournalEvent
+  , journalVisitorId :: Int
+  , journalVisitorIp :: Text
+  , journalMAliasUser :: Maybe (Text, Text)
+  , journalTime :: UTCTime
   } deriving (Generic)
 
-instance ToJSON Journal
 instance FromJSON Journal
+instance ToJSON Journal
 
-data Event
-  = EventView
-  | EventLogin
+data JournalEvent
+  = EventUser EventUser
+  | EventApp  EventApp
+  deriving (Generic)
+
+instance ToJSON JournalEvent
+instance FromJSON JournalEvent
+
+data EventUser
+  = EventLogin
   | EventLogout
-  | EventCreation
-  | EventEdit
+  | EventSignup
+  | EventEdit Text Text Text
+  | EventDelete
   deriving (Generic)
 
-instance ToJSON Event
-instance FromJSON Event
+instance ToJSON EventUser
+instance FromJSON EventUser
 
--- subject of journal entry
-data Subject
-  = SubjectUser -- cases: new user, user changes password, receives new clearance
-  | SubjectAlias
-  | SubjectEpisode
-  | SubjectPodcast
+data EventApp
+  = EventViewPage Text
+  | EventEpisodeNew Text
+  | EventPodcastNew Text
   deriving (Generic)
 
-instance ToJSON Subject
-instance FromJSON Subject
+instance ToJSON EventApp
+instance FromJSON EventApp
 
 instance FromJSON URI where
   parseJSON (String str) = case mkURI str of

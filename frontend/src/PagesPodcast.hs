@@ -34,7 +34,7 @@ import           Data.Time.Format         (defaultTimeLocale)
 import           Data.Witherable          (Filterable (mapMaybe))
 import           GHC.Num                  (Num ((*)))
 import           GHC.Real                 (Integral (div, mod))
-import           Model                    (Episode (..), Platform (..),
+import           Common.Model                    (Episode (..), Platform (..),
                                            PlatformName (..), Podcast (..),
                                            Rank (..))
 import           Obelisk.Generated.Static (static)
@@ -44,7 +44,7 @@ import           Reflex.Dom               (DomBuilder, MonadHold,
                                            Reflex (Dynamic), blank, dyn_, el,
                                            elAttr, elClass, ffor, text,
                                            widgetHold_, zipDyn, (=:))
-import           Route                    (PodcastIdentifier (unPodcastIdentifier))
+import           Common.Route                    (PodcastIdentifier (unPodcastIdentifier))
 import           Servant.Reflex           (reqSuccess)
 import           Shared                   (iFa)
 import           State                    (Session (..),
