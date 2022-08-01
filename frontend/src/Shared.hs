@@ -130,12 +130,6 @@ checkbox initial description = mdo
         eClickCB = attachWith (const . not) (current dynCbChecked) eToggle
     holdDyn initial eClickCB
 
-reqFailure :: ReqResult tag a -> Maybe Text
-reqFailure = \case
-  ResponseSuccess {}        -> Nothing
-  ResponseFailure _ _   xhr -> _xhrResponse_responseText xhr
-  RequestFailure  _ str     -> Just str
-
 updateState ::
   ( Reflex t
   , EventWriter t EStateUpdate m

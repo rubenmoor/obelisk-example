@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts          #-}
 {-# LANGUAGE KindSignatures            #-}
 {-# LANGUAGE NoImplicitPrelude         #-}
@@ -11,29 +12,53 @@ module Client where
 import           Common.Api          (EpisodeNew, RoutesApi)
 import           Common.Auth         (CompactJWT, LoginData (..),
                                       SessionData (..), UserNew (..))
-import           Control.Applicative (Applicative (pure), (<$>))
+import           Control.Applicative (Applicative (pure))
 import           Control.Monad       (Monad)
 import           Data.Bool           (Bool)
 import           Data.Data           (Proxy (..))
-import           Data.Either         (Either (..))
-import           Data.Function       (($))
+import           Data.Either         (either, Either (..))
+import           Data.Function       (const, ($))
 import Data.Functor (Functor)
-import           Data.Maybe          (Maybe)
+import           Data.Maybe          (fromMaybe, Maybe (..))
 import           Data.Text           (Text)
 import           Common.Model               (Episode, Platform, Podcast)
-import           Reflex.Dom          (Prerender (Client, prerender),
+import           Reflex.Dom          (xhrResponse_response, XhrResponseBody (..), Prerender (Client, prerender),
                                       Reflex (Dynamic, Event, never), constDyn,
                                       ffor, switchDyn)
 import           Servant.API         ((:<|>) (..))
 import           Servant.Reflex      (BaseUrl (..), ReqResult,
                                       SupportsServantReflex, client)
 import           State               (Session (..), State (stSession))
+import Servant.Common.Req (ReqResult(..))
+import Data.Functor (Functor(fmap))
+import Control.Category ((<<<))
+import Control.Lens.Getter ((^.))
+import Data.Text.Encoding (decodeUtf8')
+import Data.Semigroup (Semigroup((<>)))
+
+postRender :: (Prerender t m, Monad m) => Client m (Event t a) -> m (Event t a)
+postRender = fmap switchDyn <<< prerender (pure never)
 
 request
-  :: (Prerender t m, Monad m)
-  => Client m (Event t (ReqResult () a))
-  -> m (Event t (ReqResult () a))
-request r = switchDyn <$> prerender (pure never) r
+    :: forall t (m :: * -> *) a
+     . (Monad m, Prerender t m)
+    => Client m (Event t (ReqResult () a))
+    -> m (Event t (Either Text a))
+request =
+    fmap (fmap resultToEither <<< switchDyn) <<< prerender (pure never)
+
+resultToEither :: ReqResult () a -> Either Text a
+resultToEither = \case
+    ResponseSuccess _ x _ -> Right x
+    ResponseFailure _ _ resp ->
+      let mErrBody = do
+              responseBody <- resp ^. xhrResponse_response
+              bs           <- case responseBody of
+                  XhrResponseBody_ArrayBuffer bs -> pure bs
+                  _                              -> Nothing
+              either (const Nothing) pure $ decodeUtf8' bs
+      in  Left $ fromMaybe "Couldn't decode error body" mErrBody
+    RequestFailure _ str -> Left $ "RequestFailure: " <> str
 
 getAuthData
   :: Functor (Dynamic t)

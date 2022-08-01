@@ -20,7 +20,7 @@ import           Control.Monad            (forM_)
 import           Control.Monad.Reader     (MonadReader, asks)
 import           Data.Either              (Either (Right))
 import           Data.Function            (($))
-import           Data.Functor             (Functor (fmap), (<$>))
+import           Data.Functor             ((<&>), Functor (fmap), (<$>))
 import           Data.Int                 (Int)
 import qualified Data.Map                 as Map
 import           Data.Maybe               (Maybe (Just))
@@ -31,7 +31,6 @@ import           Data.Text                (Text, toLower)
 import qualified Data.Text                as Text
 import           Data.Time                (formatTime)
 import           Data.Time.Format         (defaultTimeLocale)
-import           Data.Witherable          (Filterable (mapMaybe))
 import           GHC.Num                  (Num ((*)))
 import           GHC.Real                 (Integral (div, mod))
 import           Common.Model                    (Episode (..), Platform (..),
@@ -39,19 +38,20 @@ import           Common.Model                    (Episode (..), Platform (..),
                                            Rank (..))
 import           Obelisk.Generated.Static (static)
 import           Obelisk.Route.Frontend   (Routed (askRoute))
-import           Reflex.Dom               (DomBuilder, MonadHold,
+import           Reflex.Dom               (fanEither, DomBuilder, MonadHold,
                                            PostBuild (getPostBuild), Prerender,
                                            Reflex (Dynamic), blank, dyn_, el,
                                            elAttr, elClass, ffor, text,
                                            widgetHold_, zipDyn, (=:))
-import           Common.Route                    (PodcastIdentifier (unPodcastIdentifier))
-import           Servant.Reflex           (reqSuccess)
+import           Common.Route                    (EpisodeSlug, PodcastIdentifier (unPodcastIdentifier))
 import           Shared                   (iFa)
 import           State                    (Session (..),
                                            State (..))
 import           Text.Printf              (printf)
 import           Text.Regex.TDFA          ((=~))
 import qualified Text.URI                 as URI
+import Data.Tuple (fst)
+import Control.Category (Category ((.)))
 
 pagePodcastView
   :: forall t (m :: * -> *).
@@ -60,10 +60,11 @@ pagePodcastView
   , MonadReader (Dynamic t State) m
   , PostBuild t m
   , Prerender t m
-  , Routed t PodcastIdentifier m
+  , Routed t (PodcastIdentifier, Maybe EpisodeSlug) m
   ) => m ()
 pagePodcastView = do
-  dynPodcastId <- fmap unPodcastIdentifier <$> askRoute
+  dynRoute <- askRoute
+  let dynPodcastId = unPodcastIdentifier . fst <$> dynRoute
   dynSession <- asks $ fmap stSession
   dyn_ $ ffor (zipDyn dynSession dynPodcastId) $ \case
     (SessionAnon, _) -> blank
@@ -71,9 +72,9 @@ pagePodcastView = do
       Just rank | rank >= RankAdmin -> iFa "fas fa-edit"
       _                             -> blank
   ePb <- getPostBuild
-  ePodcast <- mapMaybe reqSuccess <$>
+  (evFailure, evPodcast) <- fanEither <$>
     request (getPodcast (Right <$> dynPodcastId) ePb)
-  widgetHold_ blank $ ffor ePodcast $ \(Podcast{..}, platforms, episodes) -> do
+  widgetHold_ blank $ evPodcast <&> \(Podcast{..}, platforms, episodes) -> do
     elClass "div" "row" $
       elClass "div" "col-12" $ do
         el "h2" $ text podcastTitle

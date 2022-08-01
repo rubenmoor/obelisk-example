@@ -36,7 +36,6 @@ import           Data.Text                   (Text, unwords)
 import qualified Data.Text.Lazy              as Lazy
 import qualified Data.Text.Lazy.Encoding     as Lazy
 import           Data.Tuple                  (fst)
-import           Data.Witherable             (Filterable (mapMaybe))
 import           GHCJS.DOM                   (currentWindowUnchecked)
 import           GHCJS.DOM.Storage           (getItem, setItem)
 import           GHCJS.DOM.Window            (getLocalStorage)
@@ -49,7 +48,7 @@ import           Obelisk.Route.Frontend      (RouteToUrl, RoutedT, SetRoute,
 import           PagesPodcast                (pagePodcastView)
 import           PagesUser                   (pageAliasRename, pageAliasSelect,
                                               pageLogin, pageRegister)
-import           Reflex.Dom                  (elDynClass', DomBuilder, EventName (Click),
+import           Reflex.Dom                  (fanEither, elDynClass', DomBuilder, EventName (Click),
                                               EventWriter,
                                               HasDomEvent (domEvent), MonadHold,
                                               PerformEvent (..), PostBuild,
@@ -62,7 +61,6 @@ import           Reflex.Dom                  (elDynClass', DomBuilder, EventName
                                               switchHold, tailE, text,
                                               widgetHold_, (=:))
 import           Common.Route                       (FrontendRoute (..))
-import           Servant.Common.Req          (reqSuccess)
 import           Shared                      (updateState, btnSend, elLabelInput, iFa, iFa')
 import           State                       (EStateUpdate (..), Session (..),
                                               State (..))
@@ -91,9 +89,8 @@ pageSettings = do
       (mStr, _) <- elLabelInput def "Podcast identifier" "podcastidentifier"
       eSend <- btnSend $ text "Send"
       let eStr = maybe (Left "Cannot be empty") Right <$> mStr
-      response <- request (postPodcastNew authData eStr eSend)
+      (_, evSuccess) <- fanEither <$> request (postPodcastNew authData eStr eSend)
       -- TODO
-      let evSuccess = mapMaybe reqSuccess response
       -- setRoute view podcast
       blank
   pure ()

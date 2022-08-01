@@ -41,7 +41,7 @@ import           Data.Witherable        (Filterable (catMaybes, mapMaybe),
                                          filter)
 import           Obelisk.Route          (pattern (:/), R)
 import           Obelisk.Route.Frontend (RouteToUrl, SetRoute (..), routeLink)
-import           Reflex.Dom             (DomBuilder,
+import           Reflex.Dom             (fanEither, DomBuilder,
                                          EventName (Click),
                                          EventWriter,
                                          HasDomEvent (domEvent),
@@ -59,9 +59,10 @@ import           Reflex.Dom             (DomBuilder,
 import           Common.Route                  (FrontendRoute (..))
 import           Servant.Common.Req     (reqSuccess)
 import           Shared                 (btnSend, checkbox, elLabelInput,
-                                         elLabelPasswordInput, iFa, reqFailure, updateState)
+                                         elLabelPasswordInput, iFa, updateState)
 import           State                  (EStateUpdate (..), Session (..),
                                          State (..))
+import Data.Functor ((<&>))
 
 divOverlay
   :: forall t (m :: * -> *) a.
@@ -106,19 +107,19 @@ pageRegister =
     eSend <- btnSend $ text "Send"
     let eFocusLost = void $ filter not $ updated $ _inputElement_hasFocus iUserName
         eUserName = maybe (Left "user empty") Right <$> userName
-    eUserExists <- mapMaybe reqSuccess <$>
+    (_, evUserExists) <- fanEither <$>
       request (postDoesUserExist eUserName eFocusLost)
-    updateState $ filter id eUserExists $> (field @"stMsg" ?~ "username already exists")
-    dynExists <- holdDyn False eUserExists
+    updateState $ filter id evUserExists $> (field @"stMsg" ?~ "username already exists")
+    dynExists <- holdDyn False evUserExists
     let eUserNew = ffor (zipDyn dynExists $ zipDyn userName password) $ \case
           (True, _)             -> Left "username already exists"
           (_, (Just u, Just p)) -> Right $ UserNew u p Nothing True
           _                     -> Left "all fields are required"
-    eResponse <- request $ postAuthNew eUserNew eSend
-    updateState $ set (field @"stSession") . SessionUser <$> mapMaybe reqSuccess eResponse
-    updateState $ set (field @"stMsg") . Just <$> mapMaybe reqFailure eResponse
+    (evFailure, evSuccess) <- fanEither <$> request (postAuthNew eUserNew eSend)
+    updateState $ set (field @"stSession") . SessionUser <$> evSuccess
+    updateState $ set (field @"stMsg") . Just <$> evFailure
     -- TODO: store current route in route /register/ to allow going back
-    setRoute $ mapMaybe reqSuccess eResponse $> FrontendRoute_AliasRename :/ ()
+    setRoute $ evSuccess $> FrontendRoute_AliasRename :/ ()
 
 -- TODO: bug: 400 user not found is not caught
 pageLogin
@@ -139,19 +140,18 @@ pageLogin =
         eLoginData = ffor (zipDyn userName password) $ \case
           (Just u, Just p) -> Right $ LoginData u p
           _                -> Left "all fields are required"
-    eRespAuth <- request $ postAuthenticate eLoginData $ leftmost [eSend, eEnter]
-    let eRespAuthSuccess = mapMaybe reqSuccess eRespAuth
-        eLoggedIn = catMaybes eRespAuthSuccess
-    updateState $ ffor eRespAuthSuccess $ \case
+    (evFailure, evSuccess) <- fanEither <$> request (postAuthenticate eLoginData $ leftmost [eSend, eEnter])
+    let evLoggedIn = catMaybes evSuccess
+    updateState $ evSuccess <&> \case
       Just sd -> field @"stSession" .~ SessionUser sd
       Nothing -> field @"stMsg"     .~ Just "wrong password"
-    updateState $ set (field @"stMsg") . Just <$> mapMaybe reqFailure eRespAuth
-    authData <- holdDyn (Left "not logged in yet") $ ffor eLoggedIn $
+    updateState $ set (field @"stMsg") . Just <$> evFailure
+    authData <- holdDyn (Left "not logged in yet") $ evLoggedIn <&>
       \SessionData{..} -> Right (sdJwt, sdAliasName)
-    respAliases <- request (getAliasAll authData $ void eLoggedIn)
-    updateState $ set (field @"stMsg") . Just <$> mapMaybe reqFailure respAliases
+    (_, evAliases) <- fanEither <$> request (getAliasAll authData $ void evLoggedIn)
+    updateState $ set (field @"stMsg") . Just <$> evFailure
     -- TODO: store current route in route /register/ to allow going back
-    setRoute $ ffor (mapMaybe reqSuccess respAliases) $ \case
+    setRoute $ evAliases <&> \case
       [_] -> FrontendRoute_Main :/ ()
       _   -> FrontendRoute_AliasSelect :/ ()
 
@@ -174,18 +174,16 @@ pageAliasSelect = do
       css = "style" =: "aliasSelect"
   authData <- asks getAuthData
   divOverlay $ do
-    eAliases <- mapMaybe reqSuccess <$>
-                request (getAliasAll authData pb)
-    widgetHold_ loading $ ffor eAliases $ \as -> mdo
+    (_, evAliases) <- fanEither <$> request (getAliasAll authData pb)
+    widgetHold_ loading $ evAliases <&> \as -> mdo
       el "h2" $ text "Select alias"
       es <- forM as $ \alias -> do
         (elDiv, _) <- elAttr' "div" css $ text alias
         let eClick = domEvent Click elDiv
             dynAlias = constDyn $ Right alias
-        eEDone <- dyn $ ffor dynCbChecked $ \checked ->
+        eEDone <- dyn $ dynCbChecked <&> \checked ->
           if checked
-            then mapMaybe reqSuccess <$>
-                   request (postAliasSetDefault authData dynAlias eClick)
+            then snd . fanEither <$> request (postAliasSetDefault authData dynAlias eClick)
             else pure eClick
         switchHold never eEDone
       dynCbChecked <- checkbox True "Make default"
@@ -211,6 +209,5 @@ pageAliasRename = do
       eSend <- btnSend $ text "send"
       let eEnter = keypress Enter i
           eNew = maybe (Left "alias cannot be empty") Right <$> mNew
-      resp <- request (postAliasRename authData eNew $ leftmost [eSend, eEnter])
-      let success = mapMaybe reqSuccess resp
-      setRoute $ success $> FrontendRoute_Main :/ ()
+      (_, evSuccess) <- fanEither <$> request (postAliasRename authData eNew $ leftmost [eSend, eEnter])
+      setRoute $ evSuccess $> FrontendRoute_Main :/ ()

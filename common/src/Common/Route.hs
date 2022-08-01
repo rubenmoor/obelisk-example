@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE EmptyCase             #-}
 {-# LANGUAGE FlexibleContexts      #-}
@@ -31,19 +32,27 @@ import           Data.Function         (($))
 import           Data.Functor          ((<$>))
 import           Data.Monoid           (mempty)
 import           GHC.Generics          (Generic)
-import           Obelisk.Route         (pattern (:/), Encoder,
+import           Obelisk.Route         (singletonListEncoder, pathParamEncoder, maybeEncoder, pathSegmentEncoder, pattern (:/), Encoder,
                                         FullRoute (FullRoute_Backend), PageName,
                                         R, SegmentResult (PathEnd, PathSegment),
                                         mkFullRouteEncoder,
                                         singlePathSegmentEncoder, unitEncoder,
                                         unwrappedEncoder)
 import           Obelisk.Route.TH      (deriveRouteComponent)
+import Data.Maybe (Maybe)
+import Text.Show (Show)
 
 newtype PodcastIdentifier = PodcastIdentifier
   { unPodcastIdentifier :: Text }
   deriving (Generic)
 
 instance Wrapped PodcastIdentifier
+
+newtype EpisodeSlug = EpisodeSlug
+  { unEpisodeSlug :: Text }
+  deriving (Generic, Show)
+
+instance Wrapped EpisodeSlug
 
 data BackendRoute :: * -> * where
   -- | Used to handle unparseable routes.
@@ -59,7 +68,7 @@ data FrontendRoute :: * -> * where
   FrontendRoute_AliasSelect :: FrontendRoute ()
   FrontendRoute_AliasRename :: FrontendRoute ()
   FrontendRoute_Settings :: FrontendRoute ()
-  FrontendRoute_Podcast :: FrontendRoute PodcastIdentifier
+  FrontendRoute_Podcast :: FrontendRoute (PodcastIdentifier, Maybe EpisodeSlug)
 
 fullRouteEncoder
   :: Encoder (Either Text) Identity (R (FullRoute BackendRoute FrontendRoute)) PageName
@@ -78,7 +87,10 @@ fullRouteEncoder = mkFullRouteEncoder
       FrontendRoute_AliasSelect -> PathSegment "alias-select" $ unitEncoder mempty
       FrontendRoute_AliasRename -> PathSegment "alias-rename" $ unitEncoder mempty
       FrontendRoute_Settings -> PathSegment "settings" $ unitEncoder mempty
-      FrontendRoute_Podcast -> PathSegment "podcast" $ singlePathSegmentEncoder . unwrappedEncoder
+      FrontendRoute_Podcast -> PathSegment "presents" $
+        pathParamEncoder unwrappedEncoder $
+            maybeEncoder (unitEncoder mempty) $
+                singlePathSegmentEncoder . unwrappedEncoder
   )
 
 concat <$> mapM deriveRouteComponent

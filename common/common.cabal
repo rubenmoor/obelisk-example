@@ -9,6 +9,7 @@ library
       base
     , aeson
     , bytestring
+    , categories
     , containers
     , http-api-data
     , http-media
