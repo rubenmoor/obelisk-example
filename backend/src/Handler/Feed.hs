@@ -37,7 +37,6 @@ import           Data.Ord                  (Down (Down))
 import           Data.Text                 (Text, breakOn, drop, replace)
 import qualified Data.Text                 as Text
 import           Data.Time                 (defaultTimeLocale, formatTime)
-import           Data.Traversable          (traverse)
 import           Data.Tuple                (snd)
 import           Database.Gerippe          (Entity (..), InnerJoin (..), Key,
                                             PersistStoreWrite (insert, insert_),
@@ -48,14 +47,14 @@ import           Database.Gerippe          (Entity (..), InnerJoin (..), Key,
 import           DbAdapter                 (EntityField (..),
                                             Unique (..))
 import qualified DbAdapter                 as Db
-import           Common.Model                     (Episode (..),
-                                            Podcast (..))
+import           Common.Model              (Podcast (..))
 import           Safe                      (headMay)
 import           Servant.Server            (ServantErr (errBody), err404, err500, throwError)
 import           Text.Blaze.Renderer.Utf8  (renderMarkup)
 import           Text.Heterocephalus       (compileHtmlFile)
 
 import Database (runDb)
+import Data.Functor (Functor(fmap))
 
 default(Text)
 
@@ -80,11 +79,11 @@ handleFeedXML podcastId = do
     >>= maybe (throwError err404) pure
   Podcast{..} <- maybe (throwError $ err500 { errBody = "could not decode podcast blob" })
                        pure $ decodeStrict (Db.podcastBlob dbPodcast)
-  ls <- runDb (getWhere EpisodeFkPodcast key)
-  let mEpisodeList = traverse (decodeStrict . Db.episodeBlob . entityVal) ls
-  episodeList <- maybe (throwError $ err500 { errBody = "Could not decode episode blob" })
-                       pure
-                       mEpisodeList
+  ls <- fmap entityVal <$> runDb (getWhere EpisodeFkPodcast key)
+  -- let mEpisodeList = traverse (decodeStrict . Db.episodeBlob . entityVal) ls
+  -- episodeList <- maybe (throwError $ err500 { errBody = "Could not decode episode blob" })
+  --                      pure
+  --                      mEpisodeList
   url <- asks envUrl
   -- TODO: podcastLicence: https://creativecommons.org/licenses/by-nc-nd/4.0/
   -- TODO: podcastKeywords: Philosophie, Moral, Kolumbien
@@ -92,12 +91,12 @@ handleFeedXML podcastId = do
       imgUrl = podcastUrl <> "/podcast-logo.jpg"
       pubDate = toRfc822 podcastPubDate
       episodeData = getEpisodeFeedData url <$>
-        sortOn  (Down . episodeCreated) episodeList
+        sortOn  (Down . Db.episodeCreated) ls
       latestDate = maybe pubDate efdRFC822 $ headMay episodeData
   pure $ renderMarkup $(makeRelativeToProject "feed.xml.tpl" >>= compileHtmlFile)
   where
-    getEpisodeFeedData :: Text -> Episode -> EpisodeFeedData
-    getEpisodeFeedData url Episode{..} =
+    getEpisodeFeedData :: Text -> Db.Episode -> EpisodeFeedData
+    getEpisodeFeedData url Db.Episode{..} =
       let efdRFC822 = toRfc822 episodeCreated
           efdSlug = episodeSlug
           efdFtExtension = episodeFtExtension

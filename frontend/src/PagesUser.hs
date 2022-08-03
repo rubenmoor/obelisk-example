@@ -37,7 +37,7 @@ import           Data.Generics.Product  (field)
 import           Data.Maybe             (Maybe (Just, Nothing), maybe)
 import           Data.Traversable       (forM)
 import           Data.Tuple             (snd)
-import           Data.Witherable        (Filterable (catMaybes, mapMaybe),
+import           Data.Witherable        (Filterable (catMaybes),
                                          filter)
 import           Obelisk.Route          (pattern (:/), R)
 import           Obelisk.Route.Frontend (RouteToUrl, SetRoute (..), routeLink)
@@ -57,8 +57,7 @@ import           Reflex.Dom             (fanEither, DomBuilder,
                                          keypress, leftmost, switchHold, text,
                                          widgetHold_, zipDyn, (=:))
 import           Common.Route                  (FrontendRoute (..))
-import           Servant.Common.Req     (reqSuccess)
-import           Shared                 (btnSend, checkbox, elLabelInput,
+import           Shared                 (elLabelCheckbox, btnSend, elLabelInput,
                                          elLabelPasswordInput, iFa, updateState)
 import           State                  (EStateUpdate (..), Session (..),
                                          State (..))
@@ -100,7 +99,7 @@ pageRegister =
           . elementConfig_modifyAttributes
           .~ (bool ("type" =: Just "text") ("type" =: Just "password") <$> eClickCb)
     (password, _) <- elLabelInput conf "Password" "password"
-    eClickCb <- updated <$> checkbox False "Hide password input"
+    eClickCb <- updated <$> el "p" (elLabelCheckbox False "Hide password input" "hide-password")
     divFieldDescription $ text "You enter your password only once. There are \
                                \no invalid passwords except for an empty one.\
                                \ Password reset via email can be optionally added later."
@@ -186,7 +185,7 @@ pageAliasSelect = do
             then snd . fanEither <$> request (postAliasSetDefault authData dynAlias eClick)
             else pure eClick
         switchHold never eEDone
-      dynCbChecked <- checkbox True "Make default"
+      dynCbChecked <- elLabelCheckbox True "Make default" "alias-make-default"
       setRoute $ leftmost es $> FrontendRoute_Main :/ ()
 
 pageAliasRename

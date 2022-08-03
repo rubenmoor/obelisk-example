@@ -63,6 +63,7 @@ import           Snap.Core                 (Snap)
 
 import Database (runDb)
 import qualified DbJournal
+import Data.Functor ((<$>))
 
 default(Text)
 
@@ -82,7 +83,7 @@ checkClearance UserInfo{..} theShow minRank =
 handleEpisodeNew :: UserInfo -> Text -> EpisodeNew -> Handler ()
 handleEpisodeNew ui@UserInfo{..} theShow EpisodeNew{..} = do
   mShow <- runDb $ getBy $ UPodcastIdentifier theShow
-  fkPodcast <- maybe (throwError $ err500 { errBody = "show not found" })
+  episodeFkPodcast <- maybe (throwError $ err500 { errBody = "show not found" })
                      (pure . entityKey) mShow
   checkClearance ui theShow RankModerator
   let Alias{..} = uiAlias
@@ -107,8 +108,7 @@ handleEpisodeNew ui@UserInfo{..} theShow EpisodeNew{..} = do
       episodeFileSize = 0
       episodeVideoUrl = ""
       episodeVisibility = VisibilityHidden
-      episodeBlob = Lazy.toStrict $ encode Episode{..}
-  runDb $ insert_ $ Db.Episode episodeSlug episodeBlob fkPodcast
+  runDb $ insert_ $ Db.Episode {..}
   DbJournal.insert (Just uiKeyAlias) (EventApp $ EventEpisodeNew newTitle)
 
 handlePodcastGet :: Text -> Handler (Podcast, [Platform], [Episode])
@@ -128,7 +128,7 @@ handlePodcastGet podcastIdentifier = do
       let mPodcast = do
             p <- decodeStrict $ Db.podcastBlob $ entityVal podcast
             ps <- traverse (decodeStrict . Db.platformBlob . entityVal) platforms
-            es <- traverse (decodeStrict . Db.episodeBlob . entityVal) episodes
+            let es = Db.fromDbEpisode . entityVal <$> episodes
             pure (p, ps, es)
       in  maybe (throwError $ err500 { errBody = "Could not decode blobs" })
                 pure

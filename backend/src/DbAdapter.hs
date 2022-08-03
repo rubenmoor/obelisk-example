@@ -14,6 +14,7 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module DbAdapter where
 
@@ -40,8 +41,20 @@ Platform
   -- optional explicit foreign key constraint
   Foreign Podcast fkcPodcast fkPodcast
 Episode
+  title            Text
   slug             Text
-  blob             ByteString
+  customIndex      Text
+  ftExtension      Text
+  audioContentType Text
+  thumbnailFile    FilePath
+  descriptionShort Text
+  descriptionLong  Text
+  duration         Int           -- duration in seconds
+  fileSize         Int           -- file size in bytes
+  pubdate          UTCTime
+  created          UTCTime
+  videoUrl         Text
+  visibility       Model.Visibility
   fkPodcast        PodcastId
 User                             -- some real person
   name             Text
@@ -78,3 +91,22 @@ instance Eq Podcast where
 
 instance Ord Podcast where
   compare = on compare podcastIdentifier
+
+fromDbEpisode :: Episode -> Model.Episode
+fromDbEpisode Episode {..} =
+  Model.Episode
+    { episodeTitle
+    , episodeSlug
+    , episodeCustomIndex
+    , episodeFtExtension
+    , episodeAudioContentType
+    , episodeThumbnailFile
+    , episodeDescriptionShort
+    , episodeDescriptionLong
+    , episodePubdate
+    , episodeCreated
+    , episodeDuration
+    , episodeFileSize
+    , episodeVideoUrl
+    , episodeVisibility
+    }

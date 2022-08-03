@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE FlexibleContexts    #-}
@@ -25,77 +26,60 @@ import           Control.Monad.Reader        (MonadReader, ReaderT (runReaderT),
                                               asks)
 import           Data.Generics.Product  (field)
 import qualified Data.Aeson                  as Aeson
-import           Data.Bool                   (Bool (False, True), bool, not)
 import           Data.Default                (Default (def))
 import           Data.Either                 (Either (..))
 import           Data.Function               (const, flip, ($))
-import           Data.Functor                (Functor (fmap), ($>), (<$>))
+import           Data.Functor                ((<&>), Functor (fmap), ($>), (<$>))
 import           Data.Maybe                  (Maybe (..), fromMaybe, maybe)
 import           Data.Monoid                 ((<>))
-import           Data.Text                   (Text, unwords)
+import           Data.Text                   (Text)
 import qualified Data.Text.Lazy              as Lazy
 import qualified Data.Text.Lazy.Encoding     as Lazy
-import           Data.Tuple                  (fst)
 import           GHCJS.DOM                   (currentWindowUnchecked)
 import           GHCJS.DOM.Storage           (getItem, setItem)
 import           GHCJS.DOM.Window            (getLocalStorage)
 import           Language.Javascript.JSaddle (liftJSM)
 import           Obelisk.Frontend            (Frontend (..), ObeliskWidget)
 import           Obelisk.Generated.Static    (static)
-import           Obelisk.Route               (R, pattern (:/))
+import           Obelisk.Route               (R)
 import           Obelisk.Route.Frontend      (RouteToUrl, RoutedT, SetRoute,
-                                              mapRoutedT, routeLink, subRoute_)
+                                              mapRoutedT, subRoute_)
 import           PagesPodcast                (pagePodcastView)
 import           PagesUser                   (pageAliasRename, pageAliasSelect,
                                               pageLogin, pageRegister)
-import           Reflex.Dom                  (fanEither, elDynClass', DomBuilder, EventName (Click),
+import           Reflex.Dom                  (constDyn, elClass, fanEither, elDynClass', DomBuilder, EventName (Click),
                                               EventWriter,
                                               HasDomEvent (domEvent), MonadHold,
                                               PerformEvent (..), PostBuild,
                                               Prerender (prerender),
                                               Reflex (Dynamic, never, updated),
                                               blank, dyn, dyn_, el, elAttr,
-                                              elAttr', ffor,
+                                              elAttr',
                                               foldDyn, foldDynMaybe, leftmost,
                                               prerender_, runEventWriterT,
                                               switchHold, tailE, text,
                                               widgetHold_, (=:))
 import           Common.Route                       (FrontendRoute (..))
-import           Shared                      (updateState, btnSend, elLabelInput, iFa, iFa')
+import           Shared                      (elTitle, updateState, btnSend, elLabelInput, iFa)
 import           State                       (EStateUpdate (..), Session (..),
                                               State (..))
 import Control.Lens.Setter ((.~))
 
 pageHome
   :: forall t (m :: * -> *)
-  .  DomBuilder t m
-  => m ()
-pageHome = pure ()
-
-pageSettings
-  :: forall t (m :: * -> *).
-  ( DomBuilder t m
-  , MonadReader (Dynamic t State) m
+  . ( DomBuilder t m
+  , EventWriter t EStateUpdate m
+  , MonadFix m
+  , MonadHold t m
   , PostBuild t m
   , Prerender t m
+  , RouteToUrl (R FrontendRoute) m
+  , SetRoute t (R FrontendRoute) m
+  , MonadReader (Dynamic t State) m
   ) => m ()
-pageSettings = do
-  authData <- asks getAuthData
-  dynSession <- asks $ fmap stSession
-  dyn_ $ ffor dynSession $ \case
-    SessionAnon -> blank
-    SessionUser SessionData{..} -> when sdIsSiteAdmin $ do
-      el "h3" $ text "Create new podcast"
-      (mStr, _) <- elLabelInput def "Podcast identifier" "podcastidentifier"
-      eSend <- btnSend $ text "Send"
-      let eStr = maybe (Left "Cannot be empty") Right <$> mStr
-      (_, evSuccess) <- fanEither <$> request (postPodcastNew authData eStr eSend)
-      -- TODO
-      -- setRoute view podcast
-      blank
-  pure ()
+pageHome = elTitle $ constDyn "Home"
 
-navigation
+pageSettings
   :: forall t (m :: * -> *).
   ( DomBuilder t m
   , EventWriter t EStateUpdate m
@@ -107,73 +91,22 @@ navigation
   , SetRoute t (R FrontendRoute) m
   , MonadReader (Dynamic t State) m
   ) => m ()
-navigation = do
-  let divNavBar = elAttr "div" ("class" =: unwords
-        [ "row"
-        , "onMobileAtBottom"
-        , "onMobileFontBig"
-        , "navBar"
-        ])
+pageSettings = do
+  elTitle "Settings"
+  authData <- asks getAuthData
   dynSession <- asks $ fmap stSession
-  divNavBar $ mdo
-    let navButtonCls = ffor displayNav $ \cls -> unwords
-          [ "col-1"
-          , "onMobileHeight80"
-          , "onDesktopDisplayImportant"
-          , "navButton"
-          , cls
-          ]
-        spanNavBtn = fmap fst . elDynClass' "span" navButtonCls
-    eBtns <- dyn $ ffor dynSession $ \case
-      SessionAnon -> do
-        elLogin <- routeLink (FrontendRoute_Login :/ ()) $
-          spanNavBtn $ text "Login"
-        elRegister <- routeLink (FrontendRoute_Register :/ ()) $
-          spanNavBtn $ text "Register"
-        pure $ leftmost $ domEvent Click <$> [elLogin, elRegister]
-      SessionUser SessionData{..} -> do
-        elSettings <- routeLink (FrontendRoute_Settings :/ ()) $
-          spanNavBtn $ text "Settings"
-        elLogout <- spanNavBtn $ do
-          elAttr "span" ("class" =: "btnLogoutAlias") $ text sdAliasName
-          text "Logout"
-        let eLogout = domEvent Click elLogout
-        updateState $ eLogout $> (field @"stSession" .~ SessionAnon)
-        pure $ leftmost [eLogout, domEvent Click elSettings]
-    eExit <- switchHold never eBtns
-
-    let spanNavBtnHome = fmap fst . elAttr' "span"
-          ("class" =: unwords [ "col-1"
-                              , "onMobileWidthAuto"
-                              , "onDesktopBorder"
-                              , "navBtnHome"
-                              ])
-    elHome <- routeLink (FrontendRoute_Main :/ ()) $
-      spanNavBtnHome $ do
-        iFa "fas fa-home"
-        elAttr "span" ("class" =: "onMobileDisplayNone"
-                    <> "style" =: "margin-left:0.5em") $ text "Home"
-        blank
-
-    let spanNavBars =
-          elAttr "span" ("class" =: unwords
-            [ "onDesktopDisplayNone"
-            , "navBars"
-            ])
-    elBars <- spanNavBars $ iFa' "fas fa-bars"
-
-    let eHome = domEvent Click elHome
-        eToggle = domEvent Click elBars
-        toggleFunc True  s     = Just $ not s -- toggle btn always toggles
-        toggleFunc False True  = Just False -- other btns only hide
-        toggleFunc False False = Nothing
-    dynToggle <- foldDynMaybe toggleFunc False $
-      leftmost [ eToggle $> True
-               , eExit $> False
-               , eHome $> False
-               ]
-    let displayNav = bool "displayNone" "displayBlock" <$> dynToggle
-    blank
+  dyn_ $ dynSession <&> \case
+    SessionAnon -> blank
+    SessionUser SessionData{..} -> when sdIsSiteAdmin $ do
+      el "h3" $ text "Create new podcast"
+      (mStr, _) <- elLabelInput def "Podcast identifier" "podcastidentifier"
+      eSend <- btnSend $ text "Send"
+      let eStr = maybe (Left "Cannot be empty") Right <$> mStr
+      (_, evSuccess) <- fanEither <$> request (postPodcastNew authData eStr eSend)
+      -- TODO
+      -- setRoute view podcast
+      blank
+  pure ()
 
 htmlBody
   :: forall t (m :: * -> *)
@@ -198,14 +131,13 @@ htmlBody = mdo
   dynState <- foldDyn unEStateUpdate def $ leftmost [eLoaded, eStateUpdate]
 
   -- TODO persist application state on visibility change (when hidden)
-  eUpdated <- tailE $ updated dynState
-  prerender_ blank $ performEvent_ $ ffor eUpdated $ \st -> do
+  evUpdated <- tailE $ updated dynState
+  prerender_ blank $ performEvent_ $ evUpdated <&> \st -> do
     let str = Lazy.toStrict $ Lazy.decodeUtf8 $ Aeson.encode st
     liftJSM (currentWindowUnchecked >>= getLocalStorage >>= setState str)
 
   (_, eStateUpdate) <- mapRoutedT (flip runReaderT dynState . runEventWriterT) $ do
-    navigation
-    dyn_ $ ffor (stMsg <$> dynState) $ \case
+    dyn_ $ dynState <&> \State{..} -> case stMsg of
       Nothing -> pure ()
       Just str -> divMsgOverlay $ el "span" $ text str
     subRoute_ $ \case

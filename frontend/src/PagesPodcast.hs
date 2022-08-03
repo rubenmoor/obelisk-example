@@ -37,34 +37,40 @@ import           Common.Model                    (Episode (..), Platform (..),
                                            PlatformName (..), Podcast (..),
                                            Rank (..))
 import           Obelisk.Generated.Static (static)
-import           Obelisk.Route.Frontend   (Routed (askRoute))
-import           Reflex.Dom               (fanEither, DomBuilder, MonadHold,
+import           Obelisk.Route.Frontend   (SetRoute, R, RouteToUrl, Routed (askRoute))
+import           Reflex.Dom               (EventWriter, fanEither, DomBuilder, MonadHold,
                                            PostBuild (getPostBuild), Prerender,
                                            Reflex (Dynamic), blank, dyn_, el,
                                            elAttr, elClass, ffor, text,
                                            widgetHold_, zipDyn, (=:))
-import           Common.Route                    (EpisodeSlug, PodcastIdentifier (unPodcastIdentifier))
-import           Shared                   (iFa)
-import           State                    (Session (..),
+import           Common.Route                    (FrontendRoute, EpisodeSlug, PodcastIdentifier (unPodcastIdentifier))
+import           Shared                   (elTitle, iFa)
+import           State                    (EStateUpdate, Session (..),
                                            State (..))
 import           Text.Printf              (printf)
 import           Text.Regex.TDFA          ((=~))
 import qualified Text.URI                 as URI
 import Data.Tuple (fst)
 import Control.Category (Category ((.)))
+import Control.Monad.Fix (MonadFix)
 
 pagePodcastView
   :: forall t (m :: * -> *).
   ( DomBuilder t m
+  , EventWriter t EStateUpdate m
+  , MonadFix m
   , MonadHold t m
   , MonadReader (Dynamic t State) m
   , PostBuild t m
   , Prerender t m
   , Routed t (PodcastIdentifier, Maybe EpisodeSlug) m
+  , RouteToUrl (R FrontendRoute) m
+  , SetRoute t (R FrontendRoute) m
   ) => m ()
 pagePodcastView = do
   dynRoute <- askRoute
   let dynPodcastId = unPodcastIdentifier . fst <$> dynRoute
+  elTitle dynPodcastId
   dynSession <- asks $ fmap stSession
   dyn_ $ ffor (zipDyn dynSession dynPodcastId) $ \case
     (SessionAnon, _) -> blank
@@ -72,7 +78,7 @@ pagePodcastView = do
       Just rank | rank >= RankAdmin -> iFa "fas fa-edit"
       _                             -> blank
   ePb <- getPostBuild
-  (evFailure, evPodcast) <- fanEither <$>
+  (_, evPodcast) <- fanEither <$>
     request (getPodcast (Right <$> dynPodcastId) ePb)
   widgetHold_ blank $ evPodcast <&> \(Podcast{..}, platforms, episodes) -> do
     elClass "div" "row" $

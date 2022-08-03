@@ -9,7 +9,7 @@ import           Data.Aeson              (FromJSON (..), ToJSON (..),
                                           Value (String))
 import           Data.Aeson.Types        (unexpected)
 import           Data.Text               (Text)
-import           Data.Time               (Day, UTCTime)
+import           Data.Time               (UTCTime)
 import           GHC.Generics            (Generic)
 import           Text.URI                (URI, mkURI, render)
 
@@ -64,7 +64,7 @@ data Episode = Episode
   , episodeDescriptionLong  :: Text
   , episodeDuration         :: Int           -- duration in seconds
   , episodeFileSize         :: Int           -- file size in bytes
-  , episodePubdate          :: Day           -- day of recording
+  , episodePubdate          :: UTCTime
   , episodeCreated          :: UTCTime
   , episodeVideoUrl         :: Text
   , episodeVisibility       :: Visibility
@@ -76,7 +76,7 @@ instance FromJSON Episode
 data Visibility
   = VisibilityPublic
   | VisibilityHidden
-  deriving (Generic)
+  deriving (Generic, Eq, Ord)
 
 instance FromJSON Visibility
 instance ToJSON Visibility
