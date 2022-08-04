@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module State where
 
@@ -11,10 +12,12 @@ import           Data.Default     (Default (..))
 import           Data.Function    (($))
 import           Data.Semigroup   (Semigroup (..))
 import           GHC.Generics     (Generic)
+import Data.Functor (Functor (fmap))
 import Data.Text (Text)
 import Data.Maybe (Maybe(Nothing))
 import Control.Applicative (Applicative(pure, (<*>)), (<$>))
 import Data.Aeson.Types (typeMismatch, prependFailure)
+import Reflex.Dom (Reflex, EventWriter, Event, tellEvent)
 
 -- frontend application state
 
@@ -64,3 +67,12 @@ data Session
 
 instance FromJSON Session
 instance ToJSON Session
+
+updateState
+  :: ( Reflex t
+     , EventWriter t EStateUpdate m
+     )
+  => Event t (State -> State)
+  -> m ()
+updateState event =
+  tellEvent $ fmap EStateUpdate event

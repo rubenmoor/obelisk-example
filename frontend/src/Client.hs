@@ -18,7 +18,7 @@ import           Data.Bool           (Bool)
 import           Data.Data           (Proxy (..))
 import           Data.Either         (either, Either (..))
 import           Data.Function       (const, ($))
-import Data.Functor (Functor)
+import Data.Functor (Functor, (<&>))
 import           Data.Maybe          (fromMaybe, Maybe (..))
 import           Data.Text           (Text)
 import           Common.Model               (Episode, Platform, Podcast)
@@ -65,7 +65,7 @@ getAuthData
   => Dynamic t State
   -> Dynamic t (Either Text (CompactJWT, Text))
 getAuthData dynState =
-  ffor dynState $ \st -> case stSession st of
+  dynState <&> \st -> case stSession st of
     SessionAnon                 -> Left "not logged in"
     SessionUser SessionData{..} -> Right (sdJwt, sdAliasName)
 

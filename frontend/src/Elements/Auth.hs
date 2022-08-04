@@ -10,12 +10,13 @@
 {-# LANGUAGE RecursiveDo         #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE BlockArguments #-}
 
-module PagesUser
-  ( pageRegister
-  , pageLogin
-  , pageAliasSelect
-  , pageAliasRename
+module Elements.Auth
+  ( elSignup
+  , elLogin
+  , elAliasSelect
+  , elAliasRename
   ) where
 
 import           Client                 (getAliasAll, getAuthData,
@@ -35,13 +36,14 @@ import           Data.Function          (($), (&))
 import           Data.Functor           (Functor (fmap), void, ($>), (<$>))
 import           Data.Generics.Product  (field)
 import           Data.Maybe             (Maybe (Just, Nothing), maybe)
-import           Data.Traversable       (forM)
+import           Data.Traversable       (for)
 import           Data.Tuple             (snd)
 import           Data.Witherable        (Filterable (catMaybes),
                                          filter)
 import           Obelisk.Route          (pattern (:/), R)
 import           Obelisk.Route.Frontend (RouteToUrl, SetRoute (..), routeLink)
 import           Reflex.Dom             (fanEither, DomBuilder,
+                                         Event,
                                          EventName (Click),
                                          EventWriter,
                                          HasDomEvent (domEvent),
@@ -54,42 +56,34 @@ import           Reflex.Dom             (fanEither, DomBuilder,
                                          elementConfig_modifyAttributes, ffor,
                                          inputElementConfig_elementConfig,
                                          inputElementConfig_initialValue,
-                                         keypress, leftmost, switchHold, text,
-                                         widgetHold_, zipDyn, (=:))
+                                         keypress, leftmost, switchDyn, switchHold, text,
+                                         widgetHold, zipDyn, (=:))
 import           Common.Route                  (FrontendRoute (..))
-import           Shared                 (elLabelCheckbox, btnSend, elLabelInput,
-                                         elLabelPasswordInput, iFa, updateState)
-import           State                  (EStateUpdate (..), Session (..),
-                                         State (..))
+import           Elements.Common         (elLabelCheckbox, btnSend, elLabelInput,
+                                         elLabelPasswordInput, iFa, elOverlay)
+import           State                   (EStateUpdate (..), Session (..),
+                                         State (..), updateState)
+import Data.Foldable (length)
+import Data.Ord ((>))
 import Data.Functor ((<&>))
 
-divOverlay
-  :: forall t (m :: * -> *) a.
-  ( DomBuilder t m
-  , SetRoute t (R FrontendRoute) m
-  , RouteToUrl (R FrontendRoute) m
-  , Prerender t m
-  ) => m a -> m a
-divOverlay inner =
-  let cls = "class" =: "mkOverlay"
-  in  elAttr "div" cls $ do
-        let spanClose = elAttr "span" ("style" =: "float:right") $ iFa "fas fa-times"
-        routeLink (FrontendRoute_Main :/ ()) spanClose
-        inner
-
 -- TODO: bug: on reload on this page, stack overflow
-pageRegister
-  :: forall t (m :: * -> *).
-  ( DomBuilder t m
-  , SetRoute t (R FrontendRoute) m
-  , RouteToUrl (R FrontendRoute) m
-  , Prerender t m
-  , MonadHold t m
-  , MonadFix m
-  , EventWriter t EStateUpdate m
-  ) =>  m ()
-pageRegister =
-  divOverlay $ mdo
+elSignup
+  :: forall t (m :: * -> *)
+  . ( DomBuilder t m
+    , EventWriter t EStateUpdate m
+    , PostBuild t m
+    , Prerender t m
+    , MonadHold t m
+    , MonadFix m
+    , RouteToUrl (R FrontendRoute) m
+    , SetRoute t (R FrontendRoute) m
+    )
+  => Event t ()
+  -> m (Event t ())
+elSignup evShow = mdo
+  evSuccess <- switchHold never evEvSuccess
+  evEvSuccess <- elOverlay (leftmost [evShow $> True, evSuccess $> False]) mdo
     let divFieldDescription = elAttr "div" $ "class" =: "onDesktopMaxWidth370px"
     (userName, iUserName) <- elLabelInput def "Username" "username"
     divFieldDescription $ text "Your user name is not publicly visible. You \
@@ -117,21 +111,26 @@ pageRegister =
     (evFailure, evSuccess) <- fanEither <$> request (postAuthNew eUserNew eSend)
     updateState $ set (field @"stSession") . SessionUser <$> evSuccess
     updateState $ set (field @"stMsg") . Just <$> evFailure
-    -- TODO: store current route in route /register/ to allow going back
-    setRoute $ evSuccess $> FrontendRoute_AliasRename :/ ()
+    pure $ void evSuccess
+  pure $ void evSuccess
 
 -- TODO: bug: 400 user not found is not caught
-pageLogin
-  :: forall t (m :: * -> *).
-  ( DomBuilder t m
-  , SetRoute t (R FrontendRoute) m
-  , RouteToUrl (R FrontendRoute) m
-  , Prerender t m
-  , MonadHold t m
-  , EventWriter t EStateUpdate m
-  ) =>  m ()
-pageLogin =
-  divOverlay $ do
+elLogin
+  :: forall t (m :: * -> *)
+  . ( DomBuilder t m
+    , EventWriter t EStateUpdate m
+    , MonadHold t m
+    , MonadFix m
+    , PostBuild t m
+    , Prerender t m
+    , RouteToUrl (R FrontendRoute) m
+    , SetRoute t (R FrontendRoute) m
+    )
+  => Event t ()
+  -> m (Event t ())
+elLogin evShow = mdo
+  evAliases <- switchHold never evEvAliases
+  evEvAliases <- elOverlay (leftmost [evShow $> True, evAliases $> False]) do
     (userName, _) <- elLabelInput def "Username" "username"
     (password, inputPwd) <- elLabelPasswordInput def "Password" "password"
     eSend <- btnSend $ text "Login"
@@ -150,33 +149,42 @@ pageLogin =
     (_, evAliases) <- fanEither <$> request (getAliasAll authData $ void evLoggedIn)
     updateState $ set (field @"stMsg") . Just <$> evFailure
     -- TODO: store current route in route /register/ to allow going back
-    setRoute $ evAliases <&> \case
-      [_] -> FrontendRoute_Main :/ ()
-      _   -> FrontendRoute_AliasSelect :/ ()
+    pure evAliases
+  pure $ void $ filter (\ls -> length ls > 1) evAliases
 
-pageAliasSelect
-  :: forall t (m :: * -> *).
-  ( DomBuilder t m
-  , MonadFix m
-  , MonadHold t m
-  , PostBuild t m
-  , Prerender t m
-  , RouteToUrl (R FrontendRoute) m
-  , SetRoute t (R FrontendRoute) m
-  , MonadReader (Dynamic t State) m
-  ) => m ()
-pageAliasSelect = do
-  pb <- getPostBuild
-  let loading = do
-        iFa "fas fa-spinner fa-spin"
-        text " Loading ..."
-      css = "style" =: "aliasSelect"
-  authData <- asks getAuthData
-  divOverlay $ do
+elAliasSelect
+  :: forall t (m :: * -> *)
+  . ( DomBuilder t m
+    , MonadFix m
+    , MonadHold t m
+    , PostBuild t m
+    , Prerender t m
+    , RouteToUrl (R FrontendRoute) m
+    , SetRoute t (R FrontendRoute) m
+    , MonadReader (Dynamic t State) m
+    )
+  => Event t ()
+  -> m (Event t ())
+elAliasSelect evShow = mdo
+  evSuccess <- switchHold never evEvSuccess
+  evEvSuccess <- elOverlay (leftmost [evShow $> True, evSuccess $> False]) $ do
+
+    let
+        loading = do
+          iFa "fas fa-spinner fa-spin"
+          text " Loading ..."
+
+        css = "style" =: "aliasSelect"
+
+    authData <- asks getAuthData
+    pb <- getPostBuild
     (_, evAliases) <- fanEither <$> request (getAliasAll authData pb)
-    widgetHold_ loading $ evAliases <&> \as -> mdo
+
+    dynEvSuccess <- widgetHold (loading $> never) $ evAliases <&> \as -> mdo
+
       el "h2" $ text "Select alias"
-      es <- forM as $ \alias -> do
+      es <- for as $ \alias -> do
+
         (elDiv, _) <- elAttr' "div" css $ text alias
         let eClick = domEvent Click elDiv
             dynAlias = constDyn $ Right alias
@@ -185,28 +193,50 @@ pageAliasSelect = do
             then snd . fanEither <$> request (postAliasSetDefault authData dynAlias eClick)
             else pure eClick
         switchHold never eEDone
-      dynCbChecked <- elLabelCheckbox True "Make default" "alias-make-default"
-      setRoute $ leftmost es $> FrontendRoute_Main :/ ()
 
-pageAliasRename
-  :: forall t (m :: * -> *).
-  ( DomBuilder t m
-  , PostBuild t m
-  , Prerender t m
-  , RouteToUrl (R FrontendRoute) m
-  , SetRoute t (R FrontendRoute) m
-  , MonadReader (Dynamic t State) m
-  ) => m ()
-pageAliasRename = do
-  authData <- asks getAuthData
-  let dynEAlias = fmap (fmap snd) authData
-  divOverlay $
-    dyn_ $ ffor dynEAlias $ either text $ \alias -> do
-      let conf = def
-            & inputElementConfig_initialValue .~ alias
-      (mNew, i) <- elLabelInput conf "Choose an alias" "newalias"
-      eSend <- btnSend $ text "send"
-      let eEnter = keypress Enter i
-          eNew = maybe (Left "alias cannot be empty") Right <$> mNew
-      (_, evSuccess) <- fanEither <$> request (postAliasRename authData eNew $ leftmost [eSend, eEnter])
-      setRoute $ evSuccess $> FrontendRoute_Main :/ ()
+      dynCbChecked <- elLabelCheckbox True "Make default" "alias-make-default"
+      pure $ void $ leftmost es
+
+    pure $ switchDyn dynEvSuccess
+
+  pure evSuccess
+
+elAliasRename
+  :: forall t (m :: * -> *)
+  . ( DomBuilder t m
+    , MonadFix m
+    , MonadHold t m
+    , MonadReader (Dynamic t State) m
+    , PostBuild t m
+    , Prerender t m
+    , RouteToUrl (R FrontendRoute) m
+    , SetRoute t (R FrontendRoute) m
+    )
+  => Event t ()
+  -> m (Event t ())
+elAliasRename evShow = mdo
+  evSuccess' <- switchHold never evEvSuccess'
+  evEvSuccess' <- elOverlay (leftmost [evShow $> True, evSuccess' $> False]) do
+    authData <- asks getAuthData
+    let dynEAlias = fmap snd <$> authData
+
+    evEvSuccess <- dyn $ dynEAlias <&> \case
+
+      Left str -> do
+        text str
+        pure never
+
+      Right alias -> do
+        let conf = def
+              & inputElementConfig_initialValue .~ alias
+        (mNew, i) <- elLabelInput conf "Choose an alias" "newalias"
+        eSend <- btnSend $ text "send"
+        let eEnter = keypress Enter i
+            eNew = maybe (Left "alias cannot be empty") Right <$> mNew
+        (_, evSuccess) <-
+          fanEither <$> request (postAliasRename authData eNew $ leftmost [eSend, eEnter])
+        pure $ void evSuccess
+
+    switchHold never evEvSuccess
+
+  pure evSuccess'

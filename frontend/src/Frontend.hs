@@ -15,6 +15,7 @@
 
 module Frontend where
 
+import Data.Tuple (fst)
 import           Client                      (getAuthData, postPodcastNew,
                                               request)
 import           Common.Auth                 (SessionData (..))
@@ -43,10 +44,8 @@ import           Obelisk.Frontend            (Frontend (..), ObeliskWidget)
 import           Obelisk.Generated.Static    (static)
 import           Obelisk.Route               (R)
 import           Obelisk.Route.Frontend      (RouteToUrl, RoutedT, SetRoute,
-                                              mapRoutedT, subRoute_)
-import           PagesPodcast                (pagePodcastView)
-import           PagesUser                   (pageAliasRename, pageAliasSelect,
-                                              pageLogin, pageRegister)
+                                              mapRoutedT, subRoute_, askRoute)
+import           Pages.Podcast               (pagePodcastView)
 import           Reflex.Dom                  (constDyn, elClass, fanEither, elDynClass', DomBuilder, EventName (Click),
                                               EventWriter,
                                               HasDomEvent (domEvent), MonadHold,
@@ -59,10 +58,11 @@ import           Reflex.Dom                  (constDyn, elClass, fanEither, elDy
                                               prerender_, runEventWriterT,
                                               switchHold, tailE, text,
                                               widgetHold_, (=:))
-import           Common.Route                       (FrontendRoute (..))
-import           Shared                      (elTitle, updateState, btnSend, elLabelInput, iFa)
-import           State                       (EStateUpdate (..), Session (..),
-                                              State (..))
+import           Common.Route                 (FrontendRoute (..), PodcastIdentifier (..))
+import           Elements.Shared              (elPage)
+import           Elements.Common              (btnSend, elLabelInput, iFa)
+import           State                        (EStateUpdate (..), Session (..),
+                                              State (..), updateState)
 import Control.Lens.Setter ((.~))
 
 pageHome
@@ -77,7 +77,7 @@ pageHome
   , SetRoute t (R FrontendRoute) m
   , MonadReader (Dynamic t State) m
   ) => m ()
-pageHome = elTitle $ constDyn "Home"
+pageHome = blank
 
 pageSettings
   :: forall t (m :: * -> *).
@@ -92,21 +92,19 @@ pageSettings
   , MonadReader (Dynamic t State) m
   ) => m ()
 pageSettings = do
-  elTitle "Settings"
-  authData <- asks getAuthData
-  dynSession <- asks $ fmap stSession
-  dyn_ $ dynSession <&> \case
-    SessionAnon -> blank
-    SessionUser SessionData{..} -> when sdIsSiteAdmin $ do
-      el "h3" $ text "Create new podcast"
-      (mStr, _) <- elLabelInput def "Podcast identifier" "podcastidentifier"
-      eSend <- btnSend $ text "Send"
-      let eStr = maybe (Left "Cannot be empty") Right <$> mStr
-      (_, evSuccess) <- fanEither <$> request (postPodcastNew authData eStr eSend)
-      -- TODO
-      -- setRoute view podcast
-      blank
-  pure ()
+    authData <- asks getAuthData
+    dynSession <- asks $ fmap stSession
+    dyn_ $ dynSession <&> \case
+      SessionAnon -> blank
+      SessionUser SessionData{..} -> when sdIsSiteAdmin $ do
+        el "h3" $ text "Create new podcast"
+        (mStr, _) <- elLabelInput def "Podcast identifier" "podcastidentifier"
+        eSend <- btnSend $ text "Send"
+        let eStr = maybe (Left "Cannot be empty") Right <$> mStr
+        (_, evSuccess) <- fanEither <$> request (postPodcastNew authData eStr eSend)
+        -- TODO
+        -- setRoute view podcast
+        blank
 
 htmlBody
   :: forall t (m :: * -> *)
@@ -141,13 +139,12 @@ htmlBody = mdo
       Nothing -> pure ()
       Just str -> divMsgOverlay $ el "span" $ text str
     subRoute_ $ \case
-      FrontendRoute_Main        -> pageHome
-      FrontendRoute_Register    -> pageRegister
-      FrontendRoute_Login       -> pageLogin
-      FrontendRoute_AliasSelect -> pageAliasSelect
-      FrontendRoute_AliasRename -> pageAliasRename
-      FrontendRoute_Settings    -> pageSettings
-      FrontendRoute_Podcast     -> pagePodcastView
+      FrontendRoute_Main        -> elPage "Home" pageHome
+      FrontendRoute_Settings    -> elPage "Settings" pageSettings
+      FrontendRoute_Podcast     -> do
+          dynRoute <- askRoute
+          let dynPodcastId = unPodcastIdentifier . fst <$> dynRoute
+          elPage dynPodcastId $ pagePodcastView dynPodcastId
   blank
   where
     loadingScreen =

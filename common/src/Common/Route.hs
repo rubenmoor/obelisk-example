@@ -63,10 +63,6 @@ data BackendRoute :: * -> * where
 
 data FrontendRoute :: * -> * where
   FrontendRoute_Main     :: FrontendRoute ()
-  FrontendRoute_Register :: FrontendRoute ()
-  FrontendRoute_Login    :: FrontendRoute ()
-  FrontendRoute_AliasSelect :: FrontendRoute ()
-  FrontendRoute_AliasRename :: FrontendRoute ()
   FrontendRoute_Settings :: FrontendRoute ()
   FrontendRoute_Podcast :: FrontendRoute (PodcastIdentifier, Maybe EpisodeSlug)
 
@@ -82,10 +78,6 @@ fullRouteEncoder = mkFullRouteEncoder
   )
   (\case
       FrontendRoute_Main -> PathEnd $ unitEncoder mempty
-      FrontendRoute_Register -> PathSegment "register" $ unitEncoder mempty
-      FrontendRoute_Login -> PathSegment "login" $ unitEncoder mempty
-      FrontendRoute_AliasSelect -> PathSegment "alias-select" $ unitEncoder mempty
-      FrontendRoute_AliasRename -> PathSegment "alias-rename" $ unitEncoder mempty
       FrontendRoute_Settings -> PathSegment "settings" $ unitEncoder mempty
       FrontendRoute_Podcast -> PathSegment "presents" $
         pathParamEncoder unwrappedEncoder $

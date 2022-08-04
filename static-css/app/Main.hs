@@ -4,7 +4,7 @@
 
 module Main where
 
-import           Clay                           (h2, paddingLeft, (@=), rem, paddingTop, normal, (|>), sideRight, straight, linearGradient, backgroundImage,  right
+import           Clay                           (alignSide, sideLeft, h2, paddingLeft, (@=), rem, paddingTop, normal, (|>), sideRight, straight, linearGradient, backgroundImage,  right
                                                 , inlineFlex
                                                 , marginRight
                                                 , smaller
@@ -143,6 +143,7 @@ main = putCss $ do
         backgroundColor white
         padding (px 24) (px 24) (px 24) (px 24)
         position absolute
+        textAlign $ alignSide sideLeft
         zIndex 1
 
     ".msgOverlay" ? do

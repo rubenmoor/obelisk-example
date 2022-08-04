@@ -10,7 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
 
-module PagesPodcast
+module Pages.Podcast
   ( pagePodcastView
   ) where
 
@@ -44,7 +44,8 @@ import           Reflex.Dom               (EventWriter, fanEither, DomBuilder, M
                                            elAttr, elClass, ffor, text,
                                            widgetHold_, zipDyn, (=:))
 import           Common.Route                    (FrontendRoute, EpisodeSlug, PodcastIdentifier (unPodcastIdentifier))
-import           Shared                   (elTitle, iFa)
+import           Elements.Shared           (elTitle)
+import           Elements.Common           (iFa)
 import           State                    (EStateUpdate, Session (..),
                                            State (..))
 import           Text.Printf              (printf)
@@ -55,22 +56,21 @@ import Control.Category (Category ((.)))
 import Control.Monad.Fix (MonadFix)
 
 pagePodcastView
-  :: forall t (m :: * -> *).
-  ( DomBuilder t m
-  , EventWriter t EStateUpdate m
-  , MonadFix m
-  , MonadHold t m
-  , MonadReader (Dynamic t State) m
-  , PostBuild t m
-  , Prerender t m
-  , Routed t (PodcastIdentifier, Maybe EpisodeSlug) m
-  , RouteToUrl (R FrontendRoute) m
-  , SetRoute t (R FrontendRoute) m
-  ) => m ()
-pagePodcastView = do
-  dynRoute <- askRoute
-  let dynPodcastId = unPodcastIdentifier . fst <$> dynRoute
-  elTitle dynPodcastId
+  :: forall t (m :: * -> *)
+  . ( DomBuilder t m
+    , EventWriter t EStateUpdate m
+    , MonadFix m
+    , MonadHold t m
+    , MonadReader (Dynamic t State) m
+    , PostBuild t m
+    , Prerender t m
+    , Routed t (PodcastIdentifier, Maybe EpisodeSlug) m
+    , RouteToUrl (R FrontendRoute) m
+    , SetRoute t (R FrontendRoute) m
+    )
+  => Dynamic t Text
+  -> m ()
+pagePodcastView dynPodcastId = do
   dynSession <- asks $ fmap stSession
   dyn_ $ ffor (zipDyn dynSession dynPodcastId) $ \case
     (SessionAnon, _) -> blank

@@ -21,6 +21,7 @@ library
     , obelisk-executable-config-lookup
     , obelisk-generated-static
     , obelisk-route
+    , patch
     , reflex-dom
     , regex-tdfa
     , servant
@@ -33,8 +34,10 @@ library
       Frontend
   other-modules:
       Client
-    , PagesPodcast
-    , PagesUser
+    , Pages.Podcast
+    , Elements.Shared
+    , Elements.Common
+    , Elements.Auth
     , Shared
     , State
   ghc-options: -Wall -Wredundant-constraints -Wincomplete-uni-patterns -Wincomplete-record-updates -O -fno-show-valid-hole-fits
